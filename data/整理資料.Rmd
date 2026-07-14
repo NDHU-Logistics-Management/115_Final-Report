@@ -1,0 +1,432 @@
+---
+title: "整理資料"
+author: "Jundian"
+date: "`r Sys.Date()`"
+output: html_document
+---
+# 套件
+```{r}
+# library
+library(xml2)
+library(data.table)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(future.apply)
+library(progressr)
+library(readxl)
+library(pbapply)
+library(stringr)
+library(openxlsx)
+library(readr)
+library(purrr)
+```
+
+
+# 資料預處理
+## 花蓮
+```{r}
+library(data.table)
+
+# Paths
+folder_path <- "C:/Users/user/Desktop/運籌/115/票證資料/花蓮縣"
+output_path <- "C:/Users/user/Desktop/運籌/115/票證資料/整理後data/花蓮縣公車.csv"
+
+# Read files
+file_list <- list.files(
+  path = folder_path,
+  pattern = "^花蓮縣公車電子票證資料_.*\\.csv$",
+  full.names = TRUE
+)
+
+dt_list <- lapply(file_list, function(f) {
+  dt <- fread(f, fill = TRUE)
+  dt <- dt[-1]
+  dt
+})
+
+# Combine
+temp <- rbindlist(dt_list, use.names = TRUE, fill = TRUE)
+
+# Drop columns
+drop_cols <- c(
+  "所屬業管機關",
+  "來源端平台資料更新時間(yyyy-MM-dd HH:mm:ss)",
+  "本平台資料更新時間(yyyy-MM-dd HH:mm:ss)"
+)
+
+drop_cols <- intersect(drop_cols, names(temp))
+temp[, (drop_cols) := NULL]
+
+# Final
+final <- temp
+
+# Write output
+fwrite(final, output_path, bom = TRUE)
+
+head(final)
+```
+
+### check
+```{r}
+test <- read_csv("票證資料/整理後data/花蓮縣公車.csv")
+all_days_2022 <- seq(as.Date("2022-01-01"), as.Date("2022-12-31"), by = "day")
+all_days_2023 <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "day")
+all_days_2024 <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day")
+all_days_2025 <- seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day")
+
+have_days <- as.Date(unique(test$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2022 <- setdiff(all_days_2022, have_days)
+missing_days_2023 <- setdiff(all_days_2023, have_days)
+missing_days_2024 <- setdiff(all_days_2024, have_days)
+missing_days_2025 <- setdiff(all_days_2025, have_days)
+
+missing_days_2022
+missing_days_2023
+missing_days_2024
+missing_days_2025
+```
+
+
+## 臺東
+```{r}
+library(data.table)
+
+# Paths
+folder_path <- "C:/Users/user/Desktop/運籌/115/票證資料/臺東縣"
+output_path <- "C:/Users/user/Desktop/運籌/115/票證資料/整理後data/臺東縣公車.csv"
+
+# Read files
+file_list <- list.files(
+  path = folder_path,
+  pattern = "^臺東縣公車電子票證資料_.*\\.csv$",
+  full.names = TRUE
+)
+
+dt_list <- lapply(file_list, function(f) {
+  dt <- fread(f, fill = TRUE)
+  dt <- dt[-1]
+  dt
+})
+
+# Combine
+temp <- rbindlist(dt_list, use.names = TRUE, fill = TRUE)
+
+# Drop columns
+drop_cols <- c(
+  "所屬業管機關",
+  "來源端平台資料更新時間(yyyy-MM-dd HH:mm:ss)",
+  "本平台資料更新時間(yyyy-MM-dd HH:mm:ss)"
+)
+
+drop_cols <- intersect(drop_cols, names(temp))
+temp[, (drop_cols) := NULL]
+
+# Final
+final <- temp
+
+# Write output
+fwrite(final, output_path, bom = TRUE)
+
+head(final)
+```
+
+### check
+```{r}
+test <- read_csv("票證資料/整理後data/臺東縣公車.csv")
+all_days_2022 <- seq(as.Date("2022-01-01"), as.Date("2022-12-31"), by = "day")
+all_days_2023 <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "day")
+all_days_2024 <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day")
+all_days_2025 <- seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day")
+
+have_days <- as.Date(unique(test$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2022 <- setdiff(all_days_2022, have_days)
+missing_days_2023 <- setdiff(all_days_2023, have_days)
+missing_days_2024 <- setdiff(all_days_2024, have_days)
+missing_days_2025 <- setdiff(all_days_2025, have_days)
+
+missing_days_2022
+missing_days_2023
+missing_days_2024
+missing_days_2025
+```
+
+
+## 公路客運
+### 2023
+```{r}
+library(data.table)
+library(readr)
+
+# 讀檔案
+df <- read_csv("票證資料/公路客運/公路客運電子票證資料_2023.csv")
+# 刪除英文欄名
+temp1 <- df[!(df$業者編號 %in% "OperatorNo"), ]
+# 刪除不必要的欄位
+temp2 <- temp1[, -c(1, 31, 32)]
+# 用業者編號篩出會用到的資料
+temp3 <- temp2[temp2$業者編號 %in% c("0816","1201","1602","0805","1308"), ]
+# 刪除不必要的資料
+temp4 <- temp3[!temp3$搭乘路線名稱 %in% c("1356","1657","1661","1662","1665","1915"), ]
+
+# 最終版
+final <- temp4
+head(final)
+
+# 做站牌代碼對應表 跟2022年對應用
+stop_code <- unique(c(final$`上車站牌代碼`, final$`下車站牌代碼`))
+
+
+# 存成 CSV
+fwrite(
+ final,
+ "C:/Users/user/Desktop/運籌/115/票證資料/整理後data/公路客運2023.csv",
+ bom = TRUE
+)
+```
+
+#### check
+```{r}
+test <- read_csv("票證資料/整理後data/公路客運2023.csv")
+all_days_2023 <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "day")
+
+have_days <- as.Date(unique(test$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2023 <- setdiff(all_days_2023, have_days)
+
+missing_days_2023
+
+```
+
+
+### 2024
+```{r}
+library(data.table)
+library(readr)
+
+# basis <- read_csv("票證資料/整理後data/公路客運2023.csv")
+
+# 讀檔案
+df <- read_csv("票證資料/公路客運/公路客運電子票證資料_2024.csv")
+# 刪除英文欄名
+temp1 <- df[!(df$業者編號 %in% "OperatorNo"), ]
+# 刪除不必要的欄位
+temp2 <- temp1[, -c(1, 31, 32)]
+# 用業者編號篩出會用到的資料
+temp3 <- temp2[temp2$業者編號 %in% c("0805","0816","1201","1602","1308"), ]
+# 刪除不必要的資料
+temp4 <- temp3[!temp3$搭乘路線名稱 %in% c("1356","1657","1661","1662","1665","1666","1915"), ]
+
+# 最終版
+final <- temp4
+head(final)
+
+# 存成 CSV
+fwrite(
+  final,
+  "C:/Users/user/Desktop/運籌/115/票證資料/整理後data/公路客運2024.csv",
+  bom = TRUE
+)
+
+```
+
+#### check
+```{r}
+test <- read_csv("票證資料/整理後data/公路客運2024.csv")
+
+all_days_2024 <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day")
+
+have_days <- as.Date(unique(test$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2024 <- setdiff(all_days_2024, have_days)
+
+missing_days_2024
+
+```
+
+
+### 2025
+```{r}
+library(data.table)
+library(readr)
+
+# basis <- read_csv("票證資料/整理後data/公路客運2024.csv")
+
+# 讀檔案
+df1 <- read_csv("票證資料/公路客運/公路客運電子票證資料_202509.csv")
+# 刪除英文欄名
+temp1 <- df1[!(df1$業者編號 %in% "OperatorNo"), ]
+# 刪除不必要的欄位
+temp2 <- temp1[, -c(1, 31, 32)]
+# 用業者編號篩出會用到的資料
+temp3 <- temp2[temp2$業者編號 %in% c("0805","0816","1201","1602","1308"), ]
+# 刪除不必要的資料
+temp4 <- temp3[!temp3$搭乘路線名稱 %in% c("1356","1657","1661","1662","1665","1666","1915"), ]
+# 最終版
+data1 <- temp4
+head(data1)
+
+df2 <- read_csv("票證資料/公路客運/公路客運電子票證資料_202510_to_202601.csv")
+# 刪除英文欄名
+temp5 <- df2[!(df2$業者編號 %in% "OperatorNo"), ]
+# 刪除不必要的欄位
+temp6 <- temp5[, -c(1, 31, 32)]
+# 用業者編號篩出會用到的資料
+temp7 <- temp6[temp6$業者編號 %in% c("0805","0816","1201","1602","1308"), ]
+# 刪除不必要的資料
+temp8 <- temp7[!temp7$搭乘路線名稱 %in% c("1356","1657","1661","1662","1665","1666","1915"), ]
+# 刪除2026的資料
+temp9 <- temp8[grepl("^2025", temp8$`資料代表日期(yyyy-MM-dd)`), ]
+# 最終版
+data2 <- temp9
+head(data2)
+
+final <- rbind(data1, data2)
+
+# 存成 CSV
+fwrite(
+ final,
+ "C:/Users/user/Desktop/運籌/115/票證資料/整理後data/公路客運2025.csv",
+ bom = TRUE
+)
+
+```
+
+#### check
+```{r}
+test <- read_csv("票證資料/整理後data/公路客運2025.csv")
+
+all_days_2025 <- seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day")
+
+have_days <- as.Date(unique(test$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2025 <- setdiff(all_days_2025, have_days)
+
+missing_days_2025
+```
+
+
+### 2022
+```{r}
+library(data.table)
+library(readr)
+
+# 讀檔案
+df <- read_csv("票證資料/公路客運/公路客運電子票證資料_2022.csv")
+# 刪除英文欄名
+temp1 <- df[!(df$所屬業管機關 %in% "Authority"), ]
+# 刪除不必要的欄位
+temp2 <- temp1[, -c(25, 26)]
+# 用所屬業管機關篩出會用到的資料
+temp3 <- temp2[temp2$所屬業管機關 %in% c("THB-VO14-2", "THB-VO15-1"), ]
+# 先保留上車站牌代碼有在 stop_code 裡的資料
+temp4 <- temp3[temp3$`上車站牌代碼` %in% stop_code, ]
+# 再保留下車站牌代碼也有在 stop_code 裡的資料
+temp5 <- temp4[temp4$`下車站牌代碼` %in% stop_code, ]
+
+# 最終版
+final <- temp5
+head(final)
+
+# 存成 CSV
+fwrite(
+  final,
+  "C:/Users/user/Desktop/運籌/115/票證資料/整理後data/公路客運2022.csv",
+  bom = TRUE
+)
+```
+
+#### check
+```{r}
+test <- read_csv("票證資料/整理後data/公路客運2022.csv")
+all_days_2022 <- seq(as.Date("2022-01-01"), as.Date("2022-12-31"), by = "day")
+
+have_days <- as.Date(unique(test$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2022 <- setdiff(all_days_2022, have_days)
+
+missing_days_2022
+
+```
+
+# Double check
+## 花蓮
+```{r}
+library(readr)
+df <- read_csv("票證資料/整理後data/花蓮縣公車.csv")
+all_days_2023 <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "day")
+all_days_2024 <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day")
+all_days_2025 <- seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day")
+
+have_days <- as.Date(unique(df$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2023 <- setdiff(all_days_2023, have_days)
+missing_days_2024 <- setdiff(all_days_2024, have_days)
+missing_days_2025 <- setdiff(all_days_2025, have_days)
+
+missing_days_2023
+missing_days_2024
+missing_days_2025
+```
+
+
+## 臺東
+```{r}
+library(readr)
+df <- read_csv("票證資料/整理後data/臺東縣公車.csv")
+all_days_2023 <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "day")
+all_days_2024 <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day")
+all_days_2025 <- seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day")
+
+have_days <- as.Date(unique(df$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2023 <- setdiff(all_days_2023, have_days)
+missing_days_2024 <- setdiff(all_days_2024, have_days)
+missing_days_2025 <- setdiff(all_days_2025, have_days)
+
+missing_days_2023
+missing_days_2024
+missing_days_2025
+```
+
+
+## 公路客運
+```{r}
+library(readr)
+df1 <- read_csv("票證資料/整理後data/公路客運2023.csv")
+df2 <- read_csv("票證資料/整理後data/公路客運2024.csv")
+df3 <- read_csv("票證資料/整理後data/公路客運2025.csv")
+df <- rbind(df1, df2, df3)
+
+all_days_2023 <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "day")
+all_days_2024 <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day")
+all_days_2025 <- seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day")
+
+have_days <- as.Date(unique(df$`資料代表日期(yyyy-MM-dd)`))
+
+missing_days_2023 <- setdiff(all_days_2023, have_days)
+missing_days_2024 <- setdiff(all_days_2024, have_days)
+missing_days_2025 <- setdiff(all_days_2025, have_days)
+
+missing_days_2023
+missing_days_2024
+missing_days_2025
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
