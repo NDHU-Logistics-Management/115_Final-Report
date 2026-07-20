@@ -39,6 +39,7 @@
 
 報告書第256頁有關TPASS成效分析，由於推出政策的目的係希望民眾能改變旅運行爲，而使用次數則是重要的指標，建議中心進一步分析每月使用5次以上類型之高度使用公共運輸族群者之旅運行為及特性。
 
+---
 
 這裡是期中做的報告連結  
 https://github.com/NDHU-Logistics-Management/115_Midterm-Report/tree/main
