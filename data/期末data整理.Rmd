@@ -1,0 +1,1887 @@
+---
+title: "期末data整理"
+author: "Jundian"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# 花蓮
+```{r}
+library(data.table)
+
+# ============================================================
+# 1. 路徑與基本設定
+# ============================================================
+
+folder_path = "C:/Users/user/Desktop/運籌/115/票證資料/花蓮縣"
+
+output_path = paste0(
+  "C:/Users/user/Desktop/運籌/115/票證資料/",
+  "期末data/花蓮縣公車.csv"
+)
+
+date_col = "資料代表日期(yyyy-MM-dd)"
+
+# ============================================================
+# 2. 只指定需要的 4 個檔案
+# ============================================================
+
+file_list = file.path(
+  folder_path,
+  c(
+    "花蓮縣公車電子票證資料_2024.csv",
+    "花蓮縣公車電子票證資料_202509.csv",
+    "花蓮縣公車電子票證資料_202510_to_202601.csv",
+    "花蓮縣公車電子票證資料_202601_to_202606.csv"
+  )
+)
+
+# 檢查檔案是否存在
+missing_files = file_list[!file.exists(file_list)]
+
+if (length(missing_files) > 0) {
+  stop(
+    paste0(
+      "找不到以下檔案：\n",
+      paste(missing_files, collapse = "\n")
+    )
+  )
+}
+
+print(basename(file_list))
+
+# ============================================================
+# 3. 逐檔讀取與處理
+# ============================================================
+
+dt_list = lapply(
+  file_list,
+  function(f) {
+
+    file_name = basename(f)
+
+    cat("\n正在讀取：", file_name, "\n")
+
+    dt = fread(
+      f,
+      fill = TRUE,
+      showProgress = TRUE
+    )
+
+    # 如果每個原始檔第一列確實是多餘資料，才保留
+    dt = dt[-1]
+
+    # 檢查日期欄位
+    if (!(date_col %in% names(dt))) {
+      stop(
+        paste0(
+          file_name,
+          " 缺少日期欄位：",
+          date_col
+        )
+      )
+    }
+
+    # 日期轉換
+    dt[, (date_col) := as.IDate(get(date_col))]
+
+    # 排除無法轉換成日期的資料
+    dt = dt[
+      !is.na(get(date_col))
+    ]
+
+    # --------------------------------------------------------
+    # 各檔案只保留其正確日期範圍
+    # --------------------------------------------------------
+
+    if (grepl("_2024\\.csv$", file_name)) {
+
+      dt = dt[
+        get(date_col) >= as.IDate("2024-01-01") &
+          get(date_col) <= as.IDate("2024-12-31")
+      ]
+
+    } else if (grepl("_202509\\.csv$", file_name)) {
+
+      dt = dt[
+        get(date_col) >= as.IDate("2025-01-01") &
+          get(date_col) <= as.IDate("2025-09-30")
+      ]
+
+    } else if (
+      grepl("_202510_to_202601\\.csv$", file_name)
+    ) {
+
+      # 舊檔只保留 2025 年 10–12 月
+      # 移除其中重複的 2026 年 1 月
+      dt = dt[
+        get(date_col) >= as.IDate("2025-10-01") &
+          get(date_col) <= as.IDate("2025-12-31")
+      ]
+
+    } else if (
+      grepl("_202601_to_202606\\.csv$", file_name)
+    ) {
+
+      # 2026 年 1–6 月使用最新檔案
+      dt = dt[
+        get(date_col) >= as.IDate("2026-01-01") &
+          get(date_col) <= as.IDate("2026-06-30")
+      ]
+    }
+
+    dt
+  }
+)
+
+# ============================================================
+# 4. 合併
+# ============================================================
+
+temp = rbindlist(
+  dt_list,
+  use.names = TRUE,
+  fill = TRUE
+)
+
+# ============================================================
+# 5. 刪除不必要欄位
+# ============================================================
+
+drop_cols = c(
+  "所屬業管機關",
+  "來源端平台資料更新時間(yyyy-MM-dd HH:mm:ss)",
+  "本平台資料更新時間(yyyy-MM-dd HH:mm:ss)"
+)
+
+existing_drop_cols = intersect(
+  drop_cols,
+  names(temp)
+)
+
+if (length(existing_drop_cols) > 0) {
+  temp[, (existing_drop_cols) := NULL]
+}
+
+# ============================================================
+# 6. 整理最終資料
+# ============================================================
+
+# 移除完全相同的重複列
+temp = unique(temp)
+
+# 依日期排序
+setorder(
+  temp,
+  `資料代表日期(yyyy-MM-dd)`
+)
+
+final = temp
+
+# ============================================================
+# 7. 輸出
+# ============================================================
+
+fwrite(
+  final,
+  output_path,
+  bom = TRUE
+)
+
+cat("\n資料處理完成\n")
+cat("輸出位置：", output_path, "\n")
+cat("總筆數：", nrow(final), "\n")
+
+head(final)
+```
+
+
+## check
+```{r}
+library(data.table)
+
+# ============================================================
+# 1. 路徑與日期欄位
+# ============================================================
+
+folder_path = "C:/Users/user/Desktop/運籌/115/票證資料/花蓮縣"
+
+merged_path = paste0(
+  "C:/Users/user/Desktop/運籌/115/票證資料/",
+  "期末data/花蓮縣公車.csv"
+)
+
+date_col = "資料代表日期(yyyy-MM-dd)"
+
+# ============================================================
+# 2. 定義原始檔案與實際採用日期範圍
+# ============================================================
+
+file_period = data.table(
+  file_name = c(
+    "花蓮縣公車電子票證資料_2024.csv",
+    "花蓮縣公車電子票證資料_202509.csv",
+    "花蓮縣公車電子票證資料_202510_to_202601.csv",
+    "花蓮縣公車電子票證資料_202601_to_202606.csv"
+  ),
+  start_date = as.IDate(c(
+    "2024-01-01",
+    "2025-01-01",
+    "2025-10-01",
+    "2026-01-01"
+  )),
+  end_date = as.IDate(c(
+    "2024-12-31",
+    "2025-09-30",
+    "2025-12-31",
+    "2026-06-30"
+  ))
+)
+
+file_period[
+  ,
+  file_path := file.path(folder_path, file_name)
+]
+
+# ============================================================
+# 3. 檢查檔案是否存在
+# ============================================================
+
+missing_original_files = file_period[
+  !file.exists(file_path),
+  file_path
+]
+
+if (length(missing_original_files) > 0) {
+  stop(
+    paste0(
+      "找不到以下原始檔案：\n",
+      paste(missing_original_files, collapse = "\n")
+    )
+  )
+}
+
+if (!file.exists(merged_path)) {
+  stop(
+    paste0(
+      "找不到合併檔：\n",
+      merged_path
+    )
+  )
+}
+
+# ============================================================
+# 4. 讀取合併檔日期
+# ============================================================
+
+merged_data = fread(
+  merged_path,
+  select = date_col,
+  colClasses = "character",
+  showProgress = TRUE
+)
+
+# 先轉成文字並移除前後空白
+merged_data[
+  ,
+  (date_col) := trimws(as.character(get(date_col)))
+]
+
+# 只保留 YYYY-MM-DD 格式
+merged_data = merged_data[
+  grepl(
+    "^\\d{4}-\\d{2}-\\d{2}$",
+    get(date_col)
+  )
+]
+
+# 再轉成日期
+merged_data[
+  ,
+  (date_col) := as.IDate(
+    get(date_col),
+    format = "%Y-%m-%d"
+  )
+]
+
+merged_have_days = sort(
+  unique(
+    merged_data[
+      !is.na(get(date_col)),
+      get(date_col)
+    ]
+  )
+)
+
+rm(merged_data)
+gc()
+
+# ============================================================
+# 5. 逐一比較原始檔與合併檔
+# ============================================================
+
+comparison_list = list()
+difference_list = list()
+missing_date_list = list()
+
+for (i in seq_len(nrow(file_period))) {
+
+  file_name = file_period$file_name[i]
+  file_path = file_period$file_path[i]
+  start_date = file_period$start_date[i]
+  end_date = file_period$end_date[i]
+
+  cat("\n正在比較：", file_name, "\n")
+
+  original = fread(
+    file_path,
+    select = date_col,
+    colClasses = "character",
+    fill = TRUE,
+    showProgress = TRUE
+  )
+
+  # 先轉成文字並移除空白
+  original[
+    ,
+    (date_col) := trimws(as.character(get(date_col)))
+  ]
+
+  # 只保留 YYYY-MM-DD 格式
+  original = original[
+    grepl(
+      "^\\d{4}-\\d{2}-\\d{2}$",
+      get(date_col)
+    )
+  ]
+
+  # 再轉成日期
+  original[
+    ,
+    (date_col) := as.IDate(
+      get(date_col),
+      format = "%Y-%m-%d"
+    )
+  ]
+
+  # 只保留該原始檔實際採用的日期範圍
+  original = original[
+    !is.na(get(date_col)) &
+      get(date_col) >= start_date &
+      get(date_col) <= end_date
+  ]
+
+  original_have_days = sort(
+    unique(
+      original[
+        ,
+        get(date_col)
+      ]
+    )
+  )
+
+  # 理論完整日期
+  expected_days = seq(
+    start_date,
+    end_date,
+    by = "day"
+  )
+
+  # 原始檔缺少日期
+  original_missing_days = setdiff(
+    expected_days,
+    original_have_days
+  )
+
+  # 合併檔在相同期間存在日期
+  merged_have_period = merged_have_days[
+    merged_have_days >= start_date &
+      merged_have_days <= end_date
+  ]
+
+  # 合併檔缺少日期
+  merged_missing_days = setdiff(
+    expected_days,
+    merged_have_period
+  )
+
+  # 日期是否完全一致
+  same_have_dates = identical(
+    sort(original_have_days),
+    sort(merged_have_period)
+  )
+
+  same_missing_dates = identical(
+    sort(original_missing_days),
+    sort(merged_missing_days)
+  )
+
+  # 原始檔有，但合併檔沒有
+  lost_after_merge = setdiff(
+    original_have_days,
+    merged_have_period
+  )
+
+  # 合併檔有，但原始檔沒有
+  added_after_merge = setdiff(
+    merged_have_period,
+    original_have_days
+  )
+
+  comparison_list[[file_name]] = data.table(
+    檔案名稱 = file_name,
+    起始日期 = start_date,
+    結束日期 = end_date,
+    理論日期數 = length(expected_days),
+    原始檔存在日期數 = length(original_have_days),
+    合併檔存在日期數 = length(merged_have_period),
+    原始檔缺少日期數 = length(original_missing_days),
+    合併檔缺少日期數 = length(merged_missing_days),
+    存在日期是否完全相同 = same_have_dates,
+    缺少日期天數是否相同 =
+      length(original_missing_days) ==
+      length(merged_missing_days),
+    缺少日期是否完全相同 = same_missing_dates,
+    合併後遺失日期數 = length(lost_after_merge),
+    合併後新增日期數 = length(added_after_merge)
+  )
+
+  if (length(lost_after_merge) > 0) {
+    difference_list[[paste0(file_name, "_lost")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = lost_after_merge,
+      差異類型 = "原始檔有，但合併檔沒有"
+    )
+  }
+
+  if (length(added_after_merge) > 0) {
+    difference_list[[paste0(file_name, "_added")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = added_after_merge,
+      差異類型 = "合併檔有，但原始檔沒有"
+    )
+  }
+
+  if (length(original_missing_days) > 0) {
+    missing_date_list[[paste0(file_name, "_original")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = original_missing_days,
+      資料來源 = "原始檔缺少"
+    )
+  }
+
+  if (length(merged_missing_days) > 0) {
+    missing_date_list[[paste0(file_name, "_merged")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = merged_missing_days,
+      資料來源 = "合併檔缺少"
+    )
+  }
+
+  rm(original)
+  gc()
+}
+
+# ============================================================
+# 6. 顯示比較結果
+# ============================================================
+
+comparison_result = rbindlist(
+  comparison_list,
+  use.names = TRUE,
+  fill = TRUE
+)
+
+comparison_result
+```
+
+# 臺東
+```{r}
+library(data.table)
+
+# ============================================================
+# 1. 路徑與基本設定
+# ============================================================
+
+folder_path = "C:/Users/user/Desktop/運籌/115/票證資料/臺東縣"
+
+output_path = paste0(
+  "C:/Users/user/Desktop/運籌/115/票證資料/",
+  "期末data/臺東縣公車.csv"
+)
+
+date_col = "資料代表日期(yyyy-MM-dd)"
+
+# ============================================================
+# 2. 只指定需要的 5 個檔案
+# ============================================================
+
+file_list = file.path(
+  folder_path,
+  c(
+    "臺東縣公車電子票證資料_2024.csv",
+    "臺東縣公車電子票證資料_202507.csv",
+    "臺東縣公車電子票證資料_202508_to_09.csv",
+    "臺東縣公車電子票證資料_202510_to_202601.csv",
+    "臺東縣公車電子票證資料_202601_to_202606.csv"
+  )
+)
+
+# 檢查檔案是否存在
+missing_files = file_list[!file.exists(file_list)]
+
+if (length(missing_files) > 0) {
+  stop(
+    paste0(
+      "找不到以下檔案：\n",
+      paste(missing_files, collapse = "\n")
+    )
+  )
+}
+
+print(basename(file_list))
+
+# ============================================================
+# 3. 逐檔讀取與處理
+# ============================================================
+
+dt_list = lapply(
+  file_list,
+  function(f) {
+
+    file_name = basename(f)
+
+    cat("\n正在讀取：", file_name, "\n")
+
+    dt = fread(
+      f,
+      fill = TRUE,
+      showProgress = TRUE
+    )
+
+    # 如果每個原始檔第一列確實是多餘資料，才保留
+    dt = dt[-1]
+
+    # 檢查日期欄位
+    if (!(date_col %in% names(dt))) {
+      stop(
+        paste0(
+          file_name,
+          " 缺少日期欄位：",
+          date_col
+        )
+      )
+    }
+
+    # 先轉成文字
+    dt[
+      ,
+      (date_col) := trimws(as.character(get(date_col)))
+    ]
+
+    # 只保留 YYYY-MM-DD 格式
+    dt = dt[
+      grepl(
+        "^\\d{4}-\\d{2}-\\d{2}$",
+        get(date_col)
+      )
+    ]
+
+    # 再轉成日期
+    dt[
+      ,
+      (date_col) := as.IDate(
+        get(date_col),
+        format = "%Y-%m-%d"
+      )
+    ]
+
+    # --------------------------------------------------------
+    # 各檔案只保留正確日期範圍
+    # --------------------------------------------------------
+
+    if (grepl("_2024\\.csv$", file_name)) {
+
+      dt = dt[
+        get(date_col) >= as.IDate("2024-01-01") &
+          get(date_col) <= as.IDate("2024-12-31")
+      ]
+
+    } else if (grepl("_202507\\.csv$", file_name)) {
+
+      dt = dt[
+        get(date_col) >= as.IDate("2025-01-01") &
+          get(date_col) <= as.IDate("2025-07-31")
+      ]
+
+    } else if (
+      grepl("_202508_to_09\\.csv$", file_name)
+    ) {
+
+      dt = dt[
+        get(date_col) >= as.IDate("2025-08-01") &
+          get(date_col) <= as.IDate("2025-09-30")
+      ]
+
+    } else if (
+      grepl("_202510_to_202601\\.csv$", file_name)
+    ) {
+
+      # 舊檔只保留 2025 年 10–12 月
+      # 不使用其中的 2026 年 1 月
+      dt = dt[
+        get(date_col) >= as.IDate("2025-10-01") &
+          get(date_col) <= as.IDate("2025-12-31")
+      ]
+
+    } else if (
+      grepl("_202601_to_202606\\.csv$", file_name)
+    ) {
+
+      # 2026 年 1–6 月使用最新檔案
+      dt = dt[
+        get(date_col) >= as.IDate("2026-01-01") &
+          get(date_col) <= as.IDate("2026-06-30")
+      ]
+    }
+
+    dt
+  }
+)
+
+# ============================================================
+# 4. 合併
+# ============================================================
+
+temp = rbindlist(
+  dt_list,
+  use.names = TRUE,
+  fill = TRUE
+)
+
+# ============================================================
+# 5. 刪除不必要欄位
+# ============================================================
+
+drop_cols = c(
+  "所屬業管機關",
+  "來源端平台資料更新時間(yyyy-MM-dd HH:mm:ss)",
+  "本平台資料更新時間(yyyy-MM-dd HH:mm:ss)"
+)
+
+existing_drop_cols = intersect(
+  drop_cols,
+  names(temp)
+)
+
+if (length(existing_drop_cols) > 0) {
+  temp[, (existing_drop_cols) := NULL]
+}
+
+# ============================================================
+# 6. 整理最終資料
+# ============================================================
+
+# 移除完全相同的重複列
+temp = unique(temp)
+
+# 依日期排序
+setorder(
+  temp,
+  `資料代表日期(yyyy-MM-dd)`
+)
+
+final = temp
+
+# ============================================================
+# 7. 輸出
+# ============================================================
+
+fwrite(
+  final,
+  output_path,
+  bom = TRUE
+)
+
+cat("\n資料處理完成\n")
+cat("輸出位置：", output_path, "\n")
+cat("總筆數：", nrow(final), "\n")
+
+head(final)
+```
+
+## check
+```{r}
+library(data.table)
+
+# ============================================================
+# 1. 路徑與日期欄位
+# ============================================================
+
+folder_path = "C:/Users/user/Desktop/運籌/115/票證資料/臺東縣"
+
+merged_path = paste0(
+  "C:/Users/user/Desktop/運籌/115/票證資料/",
+  "期末data/臺東縣公車.csv"
+)
+
+date_col = "資料代表日期(yyyy-MM-dd)"
+
+# ============================================================
+# 2. 定義原始檔案與實際使用日期範圍
+# ============================================================
+
+file_period = data.table(
+  file_name = c(
+    "臺東縣公車電子票證資料_2024.csv",
+    "臺東縣公車電子票證資料_202507.csv",
+    "臺東縣公車電子票證資料_202508_to_09.csv",
+    "臺東縣公車電子票證資料_202510_to_202601.csv",
+    "臺東縣公車電子票證資料_202601_to_202606.csv"
+  ),
+  start_date = as.IDate(c(
+    "2024-01-01",
+    "2025-01-01",
+    "2025-08-01",
+    "2025-10-01",
+    "2026-01-01"
+  )),
+  end_date = as.IDate(c(
+    "2024-12-31",
+    "2025-07-31",
+    "2025-09-30",
+    "2025-12-31",
+    "2026-06-30"
+  ))
+)
+
+file_period[
+  ,
+  file_path := file.path(folder_path, file_name)
+]
+
+# ============================================================
+# 3. 檢查檔案是否存在
+# ============================================================
+
+missing_original_files = file_period[
+  !file.exists(file_path),
+  file_path
+]
+
+if (length(missing_original_files) > 0) {
+  stop(
+    paste0(
+      "找不到以下原始檔案：\n",
+      paste(missing_original_files, collapse = "\n")
+    )
+  )
+}
+
+if (!file.exists(merged_path)) {
+  stop(
+    paste0(
+      "找不到合併檔：\n",
+      merged_path
+    )
+  )
+}
+
+# ============================================================
+# 4. 日期清理函數
+# ============================================================
+
+clean_date_column = function(dt, date_col) {
+
+  if (!(date_col %in% names(dt))) {
+    stop(
+      paste0(
+        "資料中找不到日期欄位：",
+        date_col
+      )
+    )
+  }
+
+  # 轉成文字並移除前後空白
+  dt[
+    ,
+    (date_col) := trimws(as.character(get(date_col)))
+  ]
+
+  # 只保留 YYYY-MM-DD 格式
+  dt = dt[
+    !is.na(get(date_col)) &
+      grepl(
+        "^\\d{4}-\\d{2}-\\d{2}$",
+        get(date_col)
+      )
+  ]
+
+  # 轉成 IDate
+  dt[
+    ,
+    (date_col) := as.IDate(
+      get(date_col),
+      format = "%Y-%m-%d"
+    )
+  ]
+
+  # 排除例如 2025-13-40 之類的無效日期
+  dt = dt[
+    !is.na(get(date_col))
+  ]
+
+  dt
+}
+
+# ============================================================
+# 5. 讀取合併檔的日期
+# ============================================================
+
+cat("\n正在讀取合併檔日期\n")
+
+merged_data = fread(
+  merged_path,
+  select = date_col,
+  colClasses = "character",
+  showProgress = TRUE
+)
+
+merged_data = clean_date_column(
+  merged_data,
+  date_col
+)
+
+merged_have_days = sort(
+  unique(
+    merged_data[
+      ,
+      get(date_col)
+    ]
+  )
+)
+
+rm(merged_data)
+gc()
+
+# ============================================================
+# 6. 比較各原始檔與合併檔
+# ============================================================
+
+comparison_list = list()
+difference_list = list()
+missing_date_list = list()
+
+for (i in seq_len(nrow(file_period))) {
+
+  file_name = file_period$file_name[i]
+  file_path = file_period$file_path[i]
+  start_date = file_period$start_date[i]
+  end_date = file_period$end_date[i]
+
+  cat("\n正在比較：", file_name, "\n")
+
+  # 只讀取日期欄位
+  original = fread(
+    file_path,
+    select = date_col,
+    colClasses = "character",
+    fill = TRUE,
+    showProgress = TRUE
+  )
+
+  original = clean_date_column(
+    original,
+    date_col
+  )
+
+  # 只保留合併時實際採用的日期範圍
+  original = original[
+    get(date_col) >= start_date &
+      get(date_col) <= end_date
+  ]
+
+  # 原始檔實際存在日期
+  original_have_days = sort(
+    unique(
+      original[
+        ,
+        get(date_col)
+      ]
+    )
+  )
+
+  # 理論上應存在的完整日期
+  expected_days = seq(
+    start_date,
+    end_date,
+    by = "day"
+  )
+
+  # 原始檔缺少日期
+  original_missing_days = setdiff(
+    expected_days,
+    original_have_days
+  )
+
+  # 合併檔在同一期間存在日期
+  merged_have_period = merged_have_days[
+    merged_have_days >= start_date &
+      merged_have_days <= end_date
+  ]
+
+  # 合併檔在同一期間缺少日期
+  merged_missing_days = setdiff(
+    expected_days,
+    merged_have_period
+  )
+
+  # 日期集合是否完全一致
+  same_have_dates = identical(
+    sort(original_have_days),
+    sort(merged_have_period)
+  )
+
+  # 缺少日期是否完全一致
+  same_missing_dates = identical(
+    sort(original_missing_days),
+    sort(merged_missing_days)
+  )
+
+  # 原始檔有，但合併檔沒有
+  lost_after_merge = setdiff(
+    original_have_days,
+    merged_have_period
+  )
+
+  # 合併檔有，但該原始檔沒有
+  added_after_merge = setdiff(
+    merged_have_period,
+    original_have_days
+  )
+
+  comparison_list[[file_name]] = data.table(
+    檔案名稱 = file_name,
+    起始日期 = start_date,
+    結束日期 = end_date,
+    理論日期數 = length(expected_days),
+    原始檔存在日期數 = length(original_have_days),
+    合併檔存在日期數 = length(merged_have_period),
+    原始檔缺少日期數 = length(original_missing_days),
+    合併檔缺少日期數 = length(merged_missing_days),
+    存在日期是否完全相同 = same_have_dates,
+    缺少日期天數是否相同 =
+      length(original_missing_days) ==
+      length(merged_missing_days),
+    缺少日期是否完全相同 = same_missing_dates,
+    合併後遺失日期數 = length(lost_after_merge),
+    合併後新增日期數 = length(added_after_merge)
+  )
+
+  # 原始檔有，但合併檔沒有
+  if (length(lost_after_merge) > 0) {
+    difference_list[[paste0(file_name, "_lost")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = lost_after_merge,
+      差異類型 = "原始檔有，但合併檔沒有"
+    )
+  }
+
+  # 合併檔有，但原始檔沒有
+  if (length(added_after_merge) > 0) {
+    difference_list[[paste0(file_name, "_added")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = added_after_merge,
+      差異類型 = "合併檔有，但原始檔沒有"
+    )
+  }
+
+  # 記錄原始檔缺少日期
+  if (length(original_missing_days) > 0) {
+    missing_date_list[[paste0(file_name, "_original")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = original_missing_days,
+      資料來源 = "原始檔缺少"
+    )
+  }
+
+  # 記錄合併檔缺少日期
+  if (length(merged_missing_days) > 0) {
+    missing_date_list[[paste0(file_name, "_merged")]] = data.table(
+      檔案名稱 = file_name,
+      日期 = merged_missing_days,
+      資料來源 = "合併檔缺少"
+    )
+  }
+
+  rm(original)
+  gc()
+}
+
+# ============================================================
+# 7. 顯示比較摘要
+# ============================================================
+
+comparison_result = rbindlist(
+  comparison_list,
+  use.names = TRUE,
+  fill = TRUE
+)
+
+comparison_result
+```
+
+# 公路客運
+```{r}
+library(data.table)
+
+# ============================================================
+# 1. 路徑與篩選設定
+# ============================================================
+
+folder_path = "C:/Users/user/Desktop/運籌/115/票證資料/公路客運"
+
+output_folder = "C:/Users/user/Desktop/運籌/115/票證資料/期末data"
+
+final_output = file.path(
+  output_folder,
+  "公路客運2024_to_202606.csv"
+)
+
+date_col = "資料代表日期(yyyy-MM-dd)"
+
+keep_operators = c(
+  "0805",
+  "0816",
+  "1201",
+  "1602",
+  "1308"
+)
+
+drop_routes = c(
+  "1356",
+  "1657",
+  "1661",
+  "1662",
+  "1665",
+  "1666",
+  "1915"
+)
+
+drop_cols = c(
+  "所屬業管機關",
+  "來源端平台資料更新時間(yyyy-MM-dd HH:mm:ss)",
+  "本平台資料更新時間(yyyy-MM-dd HH:mm:ss)"
+)
+
+# 如果輸出資料夾不存在則建立
+if (!dir.exists(output_folder)) {
+  dir.create(
+    output_folder,
+    recursive = TRUE
+  )
+}
+
+# ============================================================
+# 2. 只指定需要的四個檔案
+# ============================================================
+
+file_info = data.table(
+  file_name = c(
+    "公路客運電子票證資料_2024.csv",
+    "公路客運電子票證資料_202509.csv",
+    "公路客運電子票證資料_202510_to_202601.csv",
+    "公路客運電子票證資料_202601_to_202606.csv"
+  ),
+  start_date = as.IDate(c(
+    "2024-01-01",
+    "2025-01-01",
+    "2025-10-01",
+    "2026-01-01"
+  )),
+  end_date = as.IDate(c(
+    "2024-12-31",
+    "2025-09-30",
+    "2025-12-31",
+    "2026-06-30"
+  ))
+)
+
+file_info[
+  ,
+  file_path := file.path(
+    folder_path,
+    file_name
+  )
+]
+
+# 檢查檔案是否存在
+missing_files = file_info[
+  !file.exists(file_path),
+  file_path
+]
+
+if (length(missing_files) > 0) {
+  stop(
+    paste0(
+      "找不到以下檔案：\n",
+      paste(
+        missing_files,
+        collapse = "\n"
+      )
+    )
+  )
+}
+
+print(file_info[, .(
+  檔案名稱 = file_name,
+  開始日期 = start_date,
+  結束日期 = end_date
+)])
+
+# ============================================================
+# 3. 清理欄位名稱函數
+# ============================================================
+
+clean_column_names = function(dt) {
+
+  new_names = names(dt)
+
+  # 移除 BOM
+  new_names = sub(
+    "^\ufeff",
+    "",
+    new_names
+  )
+
+  # 移除欄名前後空白
+  new_names = trimws(new_names)
+
+  # 避免重複欄名
+  new_names = make.unique(
+    new_names,
+    sep = "_duplicate_"
+  )
+
+  # 依位置重新命名
+  setnames(
+    dt,
+    new_names
+  )
+
+  dt
+}
+
+# ============================================================
+# 4. 共用處理函數
+# ============================================================
+
+process_bus_file = function(
+  input_file,
+  start_date,
+  end_date
+) {
+
+  file_name = basename(input_file)
+
+  cat(
+    "\n正在處理：",
+    file_name,
+    "\n"
+  )
+
+  dt = fread(
+    input_file,
+    fill = TRUE,
+    showProgress = TRUE
+  )
+
+  original_n = nrow(dt)
+
+  # 清理欄名
+  dt = clean_column_names(dt)
+
+  required_cols = c(
+    "業者編號",
+    "搭乘路線名稱",
+    date_col
+  )
+
+  missing_cols = setdiff(
+    required_cols,
+    names(dt)
+  )
+
+  if (length(missing_cols) > 0) {
+    stop(
+      paste0(
+        file_name,
+        " 缺少必要欄位：",
+        paste(
+          missing_cols,
+          collapse = "、"
+        )
+      )
+    )
+  }
+
+  # ----------------------------------------------------------
+  # 統一必要欄位型態
+  # ----------------------------------------------------------
+
+  dt[
+    ,
+    業者編號 := trimws(
+      as.character(業者編號)
+    )
+  ]
+
+  dt[
+    ,
+    搭乘路線名稱 := trimws(
+      as.character(搭乘路線名稱)
+    )
+  ]
+
+  if ("上車站牌代碼" %in% names(dt)) {
+    dt[
+      ,
+      上車站牌代碼 := as.character(
+        上車站牌代碼
+      )
+    ]
+  }
+
+  if ("下車站牌代碼" %in% names(dt)) {
+    dt[
+      ,
+      下車站牌代碼 := as.character(
+        下車站牌代碼
+      )
+    ]
+  }
+
+  dt[
+    ,
+    (date_col) := trimws(
+      as.character(get(date_col))
+    )
+  ]
+
+  # ----------------------------------------------------------
+  # 刪除英文欄名列
+  # ----------------------------------------------------------
+
+  dt = dt[
+    !is.na(業者編號) &
+      業者編號 != "OperatorNo"
+  ]
+
+  after_header_n = nrow(dt)
+
+  # ----------------------------------------------------------
+  # 清理並轉換日期
+  # ----------------------------------------------------------
+
+  # 只保留 YYYY-MM-DD 格式，避免 charToDate 錯誤
+  dt = dt[
+    !is.na(get(date_col)) &
+      grepl(
+        "^\\d{4}-\\d{2}-\\d{2}$",
+        get(date_col)
+      )
+  ]
+
+  dt[
+    ,
+    (date_col) := as.IDate(
+      get(date_col),
+      format = "%Y-%m-%d"
+    )
+  ]
+
+  dt = dt[
+    !is.na(get(date_col))
+  ]
+
+  # 僅保留該檔案實際使用的期間
+  dt = dt[
+    get(date_col) >= start_date &
+      get(date_col) <= end_date
+  ]
+
+  after_date_n = nrow(dt)
+
+  # ----------------------------------------------------------
+  # 保留指定業者
+  # ----------------------------------------------------------
+
+  dt = dt[
+    業者編號 %chin% keep_operators
+  ]
+
+  after_operator_n = nrow(dt)
+
+  # ----------------------------------------------------------
+  # 排除指定路線
+  # ----------------------------------------------------------
+
+  dt = dt[
+    is.na(搭乘路線名稱) |
+      !搭乘路線名稱 %chin% drop_routes
+  ]
+
+  after_route_n = nrow(dt)
+
+  # ----------------------------------------------------------
+  # 刪除不必要欄位
+  # ----------------------------------------------------------
+
+  existing_drop_cols = intersect(
+    drop_cols,
+    names(dt)
+  )
+
+  if (length(existing_drop_cols) > 0) {
+    dt[
+      ,
+      (existing_drop_cols) := NULL
+    ]
+  }
+
+  # 依日期排序
+  setorder(
+    dt,
+    `資料代表日期(yyyy-MM-dd)`
+  )
+
+  summary = data.table(
+    檔案名稱 = file_name,
+    原始筆數 = original_n,
+    刪除英文欄名後筆數 = after_header_n,
+    日期篩選後筆數 = after_date_n,
+    業者篩選後筆數 = after_operator_n,
+    路線篩選後筆數 = after_route_n
+  )
+
+  list(
+    data = dt,
+    summary = summary
+  )
+}
+
+# ============================================================
+# 5. 處理四個檔案
+# ============================================================
+
+result_list = vector(
+  mode = "list",
+  length = nrow(file_info)
+)
+
+for (i in seq_len(nrow(file_info))) {
+
+  result_list[[i]] = process_bus_file(
+    input_file = file_info$file_path[i],
+    start_date = file_info$start_date[i],
+    end_date = file_info$end_date[i]
+  )
+}
+
+# ============================================================
+# 6. 取出各檔處理後資料
+# ============================================================
+
+data_2024 = result_list[[1]]$data
+data_2025_01_to_09 = result_list[[2]]$data
+data_2025_10_to_12 = result_list[[3]]$data
+data_2026 = result_list[[4]]$data
+
+# 合併 2025 年兩個區段
+data_2025 = rbindlist(
+  list(
+    data_2025_01_to_09,
+    data_2025_10_to_12
+  ),
+  use.names = TRUE,
+  fill = TRUE
+)
+
+setorder(
+  data_2025,
+  `資料代表日期(yyyy-MM-dd)`
+)
+
+# ============================================================
+# 7. 合併 2024 至 2026 年 6 月
+# ============================================================
+
+final = rbindlist(
+  list(
+    data_2024,
+    data_2025,
+    data_2026
+  ),
+  use.names = TRUE,
+  fill = TRUE
+)
+
+# 移除完全相同的重複資料列
+final = unique(final)
+
+# 依日期排序
+setorder(
+  final,
+  `資料代表日期(yyyy-MM-dd)`
+)
+
+# ============================================================
+# 8. 輸出各年度整理檔
+# ============================================================
+
+fwrite(
+  data_2024,
+  file.path(
+    output_folder,
+    "公路客運2024.csv"
+  ),
+  bom = TRUE
+)
+
+fwrite(
+  data_2025,
+  file.path(
+    output_folder,
+    "公路客運2025.csv"
+  ),
+  bom = TRUE
+)
+
+fwrite(
+  data_2026,
+  file.path(
+    output_folder,
+    "公路客運2026.csv"
+  ),
+  bom = TRUE
+)
+
+# ============================================================
+# 9. 輸出完整合併檔
+# ============================================================
+
+fwrite(
+  final,
+  final_output,
+  bom = TRUE
+)
+
+# ============================================================
+# 10. 顯示處理摘要
+# ============================================================
+
+process_summary = rbindlist(
+  lapply(
+    result_list,
+    function(x) x$summary
+  ),
+  use.names = TRUE,
+  fill = TRUE
+)
+
+process_summary
+
+cat("\n全部處理完成\n")
+cat("合併檔位置：", final_output, "\n")
+cat("總筆數：", nrow(final), "\n")
+cat(
+  "日期範圍：",
+  as.character(
+    min(
+      final[[date_col]],
+      na.rm = TRUE
+    )
+  ),
+  "至",
+  as.character(
+    max(
+      final[[date_col]],
+      na.rm = TRUE
+    )
+  ),
+  "\n"
+)
+
+head(final)
+```
+
+## check
+```{r}
+library(data.table)
+
+# ============================================================
+# 1. 路徑與日期欄位
+# ============================================================
+
+folder_path = "C:/Users/user/Desktop/運籌/115/票證資料/期末data"
+
+merged_path = file.path(
+  folder_path,
+  "公路客運2024_to_202606.csv"
+)
+
+date_col = "資料代表日期(yyyy-MM-dd)"
+
+# ============================================================
+# 2. 各年度檔案與比較日期範圍
+# ============================================================
+
+file_period = data.table(
+  year = c(
+    2024,
+    2025,
+    2026
+  ),
+  file_name = c(
+    "公路客運2024.csv",
+    "公路客運2025.csv",
+    "公路客運2026.csv"
+  ),
+  start_date = as.IDate(c(
+    "2024-01-01",
+    "2025-01-01",
+    "2026-01-01"
+  )),
+  end_date = as.IDate(c(
+    "2024-12-31",
+    "2025-12-31",
+    "2026-06-30"
+  ))
+)
+
+file_period[
+  ,
+  file_path := file.path(
+    folder_path,
+    file_name
+  )
+]
+
+# ============================================================
+# 3. 檢查檔案是否存在
+# ============================================================
+
+if (!file.exists(merged_path)) {
+  stop(
+    paste0(
+      "找不到合併檔：\n",
+      merged_path
+    )
+  )
+}
+
+missing_files = file_period[
+  !file.exists(file_path),
+  file_path
+]
+
+if (length(missing_files) > 0) {
+  stop(
+    paste0(
+      "找不到以下年度檔案：\n",
+      paste(
+        missing_files,
+        collapse = "\n"
+      )
+    )
+  )
+}
+
+# ============================================================
+# 4. 日期清理函數
+# ============================================================
+
+clean_date_data = function(dt, date_col) {
+
+  if (!(date_col %in% names(dt))) {
+    stop(
+      paste0(
+        "找不到日期欄位：",
+        date_col
+      )
+    )
+  }
+
+  dt[
+    ,
+    (date_col) := trimws(
+      as.character(get(date_col))
+    )
+  ]
+
+  # 只保留 YYYY-MM-DD 格式
+  dt = dt[
+    !is.na(get(date_col)) &
+      grepl(
+        "^\\d{4}-\\d{2}-\\d{2}$",
+        get(date_col)
+      )
+  ]
+
+  dt[
+    ,
+    (date_col) := as.IDate(
+      get(date_col),
+      format = "%Y-%m-%d"
+    )
+  ]
+
+  dt = dt[
+    !is.na(get(date_col))
+  ]
+
+  dt
+}
+
+# ============================================================
+# 5. 讀取合併檔日期
+# ============================================================
+
+cat("\n正在讀取合併檔日期：\n")
+cat(merged_path, "\n")
+
+merged_data = fread(
+  merged_path,
+  select = date_col,
+  colClasses = "character",
+  fill = TRUE,
+  showProgress = TRUE
+)
+
+merged_data = clean_date_data(
+  merged_data,
+  date_col
+)
+
+merged_have_days = sort(
+  unique(
+    merged_data[
+      ,
+      get(date_col)
+    ]
+  )
+)
+
+cat(
+  "\n合併檔最早日期：",
+  as.character(min(merged_have_days)),
+  "\n"
+)
+
+cat(
+  "合併檔最晚日期：",
+  as.character(max(merged_have_days)),
+  "\n"
+)
+
+cat(
+  "合併檔實際日期數：",
+  length(merged_have_days),
+  "\n"
+)
+
+rm(merged_data)
+gc()
+
+# ============================================================
+# 6. 逐一比較年度檔與合併檔
+# ============================================================
+
+comparison_list = list()
+difference_list = list()
+missing_date_list = list()
+
+for (i in seq_len(nrow(file_period))) {
+
+  year_value = file_period$year[i]
+  file_name = file_period$file_name[i]
+  file_path = file_period$file_path[i]
+  start_date = file_period$start_date[i]
+  end_date = file_period$end_date[i]
+
+  cat(
+    "\n正在比較：",
+    file_name,
+    "\n"
+  )
+
+  # 只讀取日期欄位
+  yearly_data = fread(
+    file_path,
+    select = date_col,
+    colClasses = "character",
+    fill = TRUE,
+    showProgress = TRUE
+  )
+
+  yearly_data = clean_date_data(
+    yearly_data,
+    date_col
+  )
+
+  # 僅保留該年度應比較的日期區間
+  yearly_data = yearly_data[
+    get(date_col) >= start_date &
+      get(date_col) <= end_date
+  ]
+
+  # 年度檔實際存在日期
+  yearly_have_days = sort(
+    unique(
+      yearly_data[
+        ,
+        get(date_col)
+      ]
+    )
+  )
+
+  # 理論上應有的日期
+  expected_days = seq(
+    start_date,
+    end_date,
+    by = "day"
+  )
+
+  # 年度檔缺少日期
+  yearly_missing_days = setdiff(
+    expected_days,
+    yearly_have_days
+  )
+
+  # 合併檔在同一期間存在的日期
+  merged_have_period = merged_have_days[
+    merged_have_days >= start_date &
+      merged_have_days <= end_date
+  ]
+
+  # 合併檔在同一期間缺少的日期
+  merged_missing_days = setdiff(
+    expected_days,
+    merged_have_period
+  )
+
+  # 年度檔有，但合併檔沒有
+  lost_after_merge = setdiff(
+    yearly_have_days,
+    merged_have_period
+  )
+
+  # 合併檔有，但年度檔沒有
+  added_after_merge = setdiff(
+    merged_have_period,
+    yearly_have_days
+  )
+
+  # 日期集合是否完全一致
+  same_have_dates = identical(
+    sort(yearly_have_days),
+    sort(merged_have_period)
+  )
+
+  # 缺少日期集合是否完全一致
+  same_missing_dates = identical(
+    sort(yearly_missing_days),
+    sort(merged_missing_days)
+  )
+
+  comparison_list[[as.character(year_value)]] = data.table(
+    年份 = year_value,
+    年度檔案 = file_name,
+    起始日期 = start_date,
+    結束日期 = end_date,
+    理論日期數 = length(expected_days),
+    年度檔存在日期數 = length(yearly_have_days),
+    合併檔存在日期數 = length(merged_have_period),
+    年度檔缺少日期數 = length(yearly_missing_days),
+    合併檔缺少日期數 = length(merged_missing_days),
+    存在日期是否完全相同 = same_have_dates,
+    缺少日期天數是否相同 =
+      length(yearly_missing_days) ==
+      length(merged_missing_days),
+    缺少日期是否完全相同 = same_missing_dates,
+    合併後遺失日期數 = length(lost_after_merge),
+    合併後新增日期數 = length(added_after_merge)
+  )
+
+  # 年度檔有，但合併檔沒有
+  if (length(lost_after_merge) > 0) {
+
+    difference_list[[paste0(
+      year_value,
+      "_lost"
+    )]] = data.table(
+      年份 = year_value,
+      日期 = lost_after_merge,
+      差異類型 = "年度檔有，但合併檔沒有"
+    )
+  }
+
+  # 合併檔有，但年度檔沒有
+  if (length(added_after_merge) > 0) {
+
+    difference_list[[paste0(
+      year_value,
+      "_added"
+    )]] = data.table(
+      年份 = year_value,
+      日期 = added_after_merge,
+      差異類型 = "合併檔有，但年度檔沒有"
+    )
+  }
+
+  # 年度檔缺少日期
+  if (length(yearly_missing_days) > 0) {
+
+    missing_date_list[[paste0(
+      year_value,
+      "_yearly"
+    )]] = data.table(
+      年份 = year_value,
+      日期 = yearly_missing_days,
+      資料來源 = "年度檔缺少"
+    )
+  }
+
+  # 合併檔缺少日期
+  if (length(merged_missing_days) > 0) {
+
+    missing_date_list[[paste0(
+      year_value,
+      "_merged"
+    )]] = data.table(
+      年份 = year_value,
+      日期 = merged_missing_days,
+      資料來源 = "合併檔缺少"
+    )
+  }
+
+  rm(yearly_data)
+  gc()
+}
+
+# ============================================================
+# 7. 顯示比較摘要
+# ============================================================
+
+comparison_result = rbindlist(
+  comparison_list,
+  use.names = TRUE,
+  fill = TRUE
+)
+
+comparison_result
+
+```
+
+
+
