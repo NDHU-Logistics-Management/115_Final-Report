@@ -41,5 +41,5 @@
 
 ---
 
-這裡是期中做的報告連結  
+這裡是期中報告的連結  
 https://github.com/NDHU-Logistics-Management/115_Midterm-Report/tree/main
