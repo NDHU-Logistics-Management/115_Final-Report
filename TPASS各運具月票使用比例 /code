@@ -1,18 +1,16 @@
 library(dplyr)
 library(tidyr)
 library(data.table)
-library(openxlsx)
-library(tidyverse)
 
 #--------------公路客運-------------- 
 data0 <- fread("C:/Users/Angela/Documents/運籌期末/公路客運2024_to_202606.txt")
 data0$搭乘路線名稱 <- trimws(as.character(data0$搭乘路線名稱))
-
+# 路線分類
 hualien_routes <- c(
   "1121","1122","1125","1128","1129","1130","1132","1133",
   "1135","1136","1137","1139","1140","1141","1142","1143",
   "1145","8101","8102","8105","8119","8161","8173","8181"
-) #花蓮公路客運
+) #花蓮公路客運路線
 
 taitung_routes <- c(
   "8101","8102","8103","8105","8107","8109","8113","8115","8117",
@@ -20,20 +18,19 @@ taitung_routes <- c(
   "8136","8137","8138","8150","8151","8152","8153","8157","8158",
   "8161","8163","8165","8166","8167","8168","8170","8171","8172",
   "8173","8178","8181"
-) #台東公路客運
-
+) #台東公路客運路線
 
 #------- 花蓮 --------
 hualien <- data0[搭乘路線名稱 %in% hualien_routes ,]
 
 hualien[, 月份 := sprintf(
-  "%03d%02d",
+  "%03d/%02d",
   as.integer(format(`資料代表日期(yyyy-MM-dd)`, "%Y")) - 1911,
   as.integer(format(`資料代表日期(yyyy-MM-dd)`, "%m"))
 )]
 
 hualien <- hualien[
-  月份 >= "11306" & 月份 <= "11506"
+  月份 >= "113/06" & 月份 <= "115/06"
 ]
 
 #TPASS
@@ -43,6 +40,7 @@ hua_tpass <- hualien[
   )
 ]
 
+#比例計算
 hua_total <- hualien[
   ,
   .(總搭乘人次 = sum(原始票證筆數)),
@@ -64,56 +62,77 @@ hua_total[, TPASS比例 := TPASS搭乘人次 / 總搭乘人次 * 100]
 hua_total[, TPASS比例 := round(TPASS比例, 1)]
 print(hua_total)
 
+#繪圖
 windowsFonts(msjh = windowsFont("Microsoft JhengHei"))
 
 png("花蓮公路客運TPASS比例.png",
-    width = 1800,
-    height = 900,
+    width = 2600,
+    height = 1000,
     res = 300)
 
-par(family = "msjh", mar = c(5, 5, 4, 2), bty = "l")
+par(family = "msjh", mar = c(4, 4, 4, 3), 
+    mgp = c(2, 0.7, 0), bty = "l")
 
-ymin <- floor(min(hua_total$TPASS比例)) - 1
-ymax <- ceiling(max(hua_total$TPASS比例)) + 2
+ymin <- floor(min(hua_total$TPASS比例) / 5) * 5
+ymax <- ceiling(max(hua_total$TPASS比例) / 5) * 5
 
 plot(
   1:nrow(hua_total),
   hua_total$TPASS比例,
-  type = "o",
-  pch = 16,
-  lwd = 1,
-  cex = 0.8,
-  col = "grey35",
+  type = "n",
   xaxt = "n",
   yaxt = "n",
   xlab = "月份",
-  ylab = "TPASS使用比例 (%)",
+  ylab = "TPASS使用比例",
   main = "113年6月至115年6月花蓮縣公路客運TPASS使用比例折線圖",
   ylim = c(ymin,ymax)
 )
 
+abline(
+  h = seq(ymin, ymax, by = 5),
+  col = "grey60",
+  lty = 3,
+  lwd = 0.6
+)
+
+abline(
+  v = seq(1, nrow(hua_total), by = 4),
+  col = "grey60",
+  lty = 3,
+  lwd = 0.6
+)
+
+lines(
+  x = 1:nrow(hua_total),
+  y = hua_total$TPASS比例,
+  type = "o",
+  pch = 16,
+  lwd = 1,
+  cex = 0.75,
+  col = "grey30"
+)
+
+x_pos <- seq(1, nrow(hua_total), by = 2)
 axis(
   side = 1,
-  at = 1:nrow(hua_total),
-  labels = hua_total$月份,
-  las = 2,
-  cex.axis = 0.65
+  at = x_pos,
+  labels = hua_total$月份[x_pos],
+  las = 1,
+  cex.axis = 0.7
 )
 
 axis(
   side = 2,
-  at = seq(ymin,ymax, by = 2),
-  las = 1, 
-  cex.axis = 0.65
+  at = seq(ymin, ymax, by = 5),
+  las = 1,
+  cex.axis = 0.7
 )
 
 text(
-  x = 1:25,
-  y = hua_total$TPASS比例,
-  labels = paste0(hua_total$TPASS比例),
-  pos = 3,
-  offset = 0.35,
-  cex = 0.5
+  x = 1:nrow(hua_total),
+  y = hua_total$TPASS比例 + 1.5,
+  labels = sprintf("%.1f%%", hua_total$TPASS比例),
+  cex = 0.55
 )
 
 dev.off()
@@ -122,13 +141,13 @@ dev.off()
 taitung <- data0[搭乘路線名稱 %in% taitung_routes ,]
 
 taitung[, 月份 := sprintf(
-  "%03d%02d",
+  "%03d/%02d",
   as.integer(format(`資料代表日期(yyyy-MM-dd)`, "%Y")) - 1911,
   as.integer(format(`資料代表日期(yyyy-MM-dd)`, "%m"))
 )]
 
 taitung <- taitung[
-  月份 >= "11306" & 月份 <= "11506"
+  月份 >= "113/06" & 月份 <= "115/06"
 ]
 
 tai_tpass <- taitung[
@@ -158,54 +177,75 @@ tai_total[, TPASS比例 := round(TPASS比例, 1)]
 
 print(tai_total)
 
+#繪圖
 png("臺東公路客運TPASS比例.png",
-    width = 1800,
-    height = 900,
+    width = 2600,
+    height = 1000,
     res = 300)
 
-par(family = "msjh", mar = c(5, 5, 4, 2), bty = "l")
+par(family = "msjh", mar = c(4, 4, 4, 3),
+    mgp = c(2, 0.7, 0), bty = "l")
 
-ymin <- floor(min(tai_total$TPASS比例)) - 1
-ymax <- ceiling(max(tai_total$TPASS比例)) + 2.5
+ymin <- floor(min(tai_total$TPASS比例) / 5) * 5
+ymax <- ceiling(max(tai_total$TPASS比例) / 5) * 5
 
 plot(
   1:nrow(tai_total),
   tai_total$TPASS比例,
-  type = "o",
-  pch = 16,
-  lwd = 1,
-  cex = 0.8,
-  col = "grey35",
+  type = "n",
   xaxt = "n",
   yaxt = "n",
   xlab = "月份",
-  ylab = "TPASS使用比例 (%)",
+  ylab = "TPASS使用比例",
   main = "113年6月至115年6月臺東縣公路客運TPASS使用比例折線圖",
-  ylim = c(ymin,ymax)
+  ylim = c(ymin, ymax)
 )
 
+abline(
+  h = seq(ymin, ymax, by = 5),
+  col = "grey60",
+  lty = 3,
+  lwd = 0.6
+)
+
+abline(
+  v = seq(1, nrow(tai_total), by = 4),
+  col = "grey60",
+  lty = 3,
+  lwd = 0.6
+)
+
+lines(
+  x = 1:nrow(tai_total),
+  y = tai_total$TPASS比例,
+  type = "o",
+  pch = 16,
+  lwd = 1,
+  cex = 0.75,
+  col = "grey30"
+)
+
+x_pos <- seq(1, nrow(tai_total), by = 2)
 axis(
   side = 1,
-  at = 1:nrow(tai_total),
-  labels = tai_total$月份,
-  las = 2,
-  cex.axis = 0.65
+  at = x_pos,
+  labels = tai_total$月份[x_pos],
+  las = 1,
+  cex.axis = 0.7
 )
 
 axis(
   side = 2,
-  at = seq(ymin,ymax, by = 3),
-  las = 1, 
-  cex.axis = 0.65
+  at = seq(ymin, ymax, by = 5),
+  las = 1,
+  cex.axis = 0.7
 )
 
 text(
-  x = 1:25,
-  y = tai_total$TPASS比例,
-  labels = paste0(tai_total$TPASS比例),
-  pos = 3,
-  offset = 0.35,
-  cex = 0.5
+  x = (1:nrow(tai_total)) + 0.15,
+  y = tai_total$TPASS比例 + 2,
+  labels = sprintf("%.1f%%", tai_total$TPASS比例),
+  cex = 0.55
 )
 
 dev.off()
