@@ -5,12 +5,12 @@ library(data.table)
 #--------------公路客運-------------- 
 data0 <- fread("C:/Users/Angela/Documents/運籌期末/公路客運2024_to_202606.txt")
 data0$搭乘路線名稱 <- trimws(as.character(data0$搭乘路線名稱))
-# 路線分類
+
 hualien_routes <- c(
   "1121","1122","1125","1128","1129","1130","1132","1133",
   "1135","1136","1137","1139","1140","1141","1142","1143",
   "1145","8101","8102","8105","8119","8161","8173","8181"
-) #花蓮公路客運路線
+) #花蓮公路客運
 
 taitung_routes <- c(
   "8101","8102","8103","8105","8107","8109","8113","8115","8117",
@@ -18,7 +18,8 @@ taitung_routes <- c(
   "8136","8137","8138","8150","8151","8152","8153","8157","8158",
   "8161","8163","8165","8166","8167","8168","8170","8171","8172",
   "8173","8178","8181"
-) #台東公路客運路線
+) #台東公路客運
+
 
 #------- 花蓮 --------
 hualien <- data0[搭乘路線名稱 %in% hualien_routes ,]
@@ -66,12 +67,14 @@ print(hua_total)
 windowsFonts(msjh = windowsFont("Microsoft JhengHei"))
 
 png("花蓮公路客運TPASS比例.png",
-    width = 2600,
-    height = 1000,
-    res = 300)
-
-par(family = "msjh", mar = c(4, 4, 4, 3), 
-    mgp = c(2, 0.7, 0), bty = "l")
+  width = 15,
+  height = 5,
+  units = "in",
+  res = 300
+)
+par(family = "msjh", mar = c(5, 5.5, 4, 3), 
+    mgp = c(3, 0.8, 0), bty = "l", cex.lab = 1.5
+    )
 
 ymin <- floor(min(hua_total$TPASS比例) / 5) * 5
 ymax <- ceiling(max(hua_total$TPASS比例) / 5) * 5
@@ -85,7 +88,8 @@ plot(
   xlab = "月份",
   ylab = "TPASS使用比例",
   main = "113年6月至115年6月花蓮縣公路客運TPASS使用比例折線圖",
-  ylim = c(ymin,ymax)
+  cex.main = 1.7,
+  ylim = c(ymin - 0.8,ymax + 0.8)
 )
 
 abline(
@@ -107,10 +111,11 @@ lines(
   y = hua_total$TPASS比例,
   type = "o",
   pch = 16,
-  lwd = 1,
-  cex = 0.75,
+  lwd = 1.5,
+  cex = 1.0,
   col = "grey30"
 )
+
 
 x_pos <- seq(1, nrow(hua_total), by = 2)
 axis(
@@ -118,21 +123,21 @@ axis(
   at = x_pos,
   labels = hua_total$月份[x_pos],
   las = 1,
-  cex.axis = 0.7
+  cex.axis = 1.2
 )
 
 axis(
   side = 2,
   at = seq(ymin, ymax, by = 5),
   las = 1,
-  cex.axis = 0.7
+  cex.axis = 1.2
 )
 
 text(
   x = 1:nrow(hua_total),
-  y = hua_total$TPASS比例 + 1.5,
+  y = hua_total$TPASS比例 + 1.75,
   labels = sprintf("%.1f%%", hua_total$TPASS比例),
-  cex = 0.55
+  cex = 0.95
 )
 
 dev.off()
@@ -179,12 +184,13 @@ print(tai_total)
 
 #繪圖
 png("臺東公路客運TPASS比例.png",
-    width = 2600,
-    height = 1000,
+    width = 15,
+    height = 5,
+    units = "in",
     res = 300)
 
-par(family = "msjh", mar = c(4, 4, 4, 3),
-    mgp = c(2, 0.7, 0), bty = "l")
+par(family = "msjh", mar = c(5, 5.5, 4, 3),
+    mgp = c(3, 0.8, 0), bty = "l", cex.lab = 1.5)
 
 ymin <- floor(min(tai_total$TPASS比例) / 5) * 5
 ymax <- ceiling(max(tai_total$TPASS比例) / 5) * 5
@@ -197,8 +203,9 @@ plot(
   yaxt = "n",
   xlab = "月份",
   ylab = "TPASS使用比例",
+  cex.main = 1.7,
   main = "113年6月至115年6月臺東縣公路客運TPASS使用比例折線圖",
-  ylim = c(ymin, ymax)
+  ylim = c(ymin - 0.8, ymax + 0.8)
 )
 
 abline(
@@ -220,8 +227,8 @@ lines(
   y = tai_total$TPASS比例,
   type = "o",
   pch = 16,
-  lwd = 1,
-  cex = 0.75,
+  lwd = 1.5,
+  cex = 1.0,
   col = "grey30"
 )
 
@@ -231,21 +238,29 @@ axis(
   at = x_pos,
   labels = tai_total$月份[x_pos],
   las = 1,
-  cex.axis = 0.7
+  cex.axis = 1.2
 )
 
 axis(
   side = 2,
   at = seq(ymin, ymax, by = 5),
   las = 1,
-  cex.axis = 0.7
+  cex.axis = 1.2
 )
+#(單點位置修正)
+label_y <- tai_total$TPASS比例 + 2
+
+idx <- c(3, 8, 9, 14, 15)
+label_y[idx] <- tai_total$TPASS比例[idx] + 2.5
+
+idx1 <- c(2, 18, 21)
+label_y[idx1] <- tai_total$TPASS比例[idx1] + 3.5
 
 text(
-  x = (1:nrow(tai_total)) + 0.15,
-  y = tai_total$TPASS比例 + 2,
+  x = 1:nrow(tai_total),
+  y = label_y,
   labels = sprintf("%.1f%%", tai_total$TPASS比例),
-  cex = 0.55
+  cex = 0.95
 )
 
 dev.off()
