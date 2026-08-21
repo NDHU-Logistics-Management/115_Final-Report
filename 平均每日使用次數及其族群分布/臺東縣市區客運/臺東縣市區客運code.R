@@ -1,29 +1,3 @@
-# ================================================================
-# 113年6月至115年6月 臺東縣市區客運圖表（最終完整版）
-#
-# 目前產出：
-# 1. 平均每日使用次數折線圖（PNG）
-# 2. 平均每日使用次數表（報告式PNG＋計算明細CSV）
-# 3. 全體乘客各搭乘次數區間月人數變化折線圖（PNG）
-# 4. 全體乘客各搭乘次數區間月人數及百分比變化表（報告式PNG＋CSV）
-# 5. TPASS乘客各搭乘次數區間月人數變化折線圖（PNG）
-# 6. TPASS乘客各搭乘次數區間月人數及百分比變化表（報告式PNG＋CSV）
-# 7. 本次實際納入的市區客運路線檢查表（CSV）
-#
-# 統計原則：
-# - 每列刷卡紀錄計為一次搭乘。
-# - 乘客以匿名卡號辨識；同一卡號在同一月份的列數為該月搭乘次數。
-# - 日均使用次數 = 每人每月平均使用次數 / 該月天數。
-# - 每人每月平均使用次數 = 該月總使用次數 / 該月使用人數。
-# - 區間百分比 = 該區間人數 / 該月總乘客人數 × 100。
-# - TPASS：票種類型為4，且票種次類型為#TTT-299。
-# - 臺東市區客運：業者編號1202，且搭乘路線代碼為
-#   TTT0981、TTT0982、TTT0984、TTT0985之一。
-# ================================================================
-
-# 第一次執行若尚未安裝 data.table，請先執行：
-# install.packages("data.table")
-
 if (!requireNamespace("data.table", quietly = TRUE)) {
   stop("尚未安裝 data.table，請先執行 install.packages('data.table')")
 }
@@ -141,6 +115,30 @@ text_columns <- c(
 
 raw_data[, (text_columns) := lapply(.SD, trimws), .SDcols = text_columns]
 raw_data[, 搭乘日期 := as.IDate(trimws(搭乘日期))]
+
+if (raw_data[!is.na(搭乘日期), .N] == 0L) {
+  stop("日期欄位沒有可辨識的有效日期，請檢查CSV的日期格式。")
+}
+
+source_date_range <- raw_data[
+  !is.na(搭乘日期),
+  range(搭乘日期)
+]
+
+cat(
+  "CSV有效日期範圍：",
+  format(source_date_range[1]),
+  "至",
+  format(source_date_range[2]),
+  "\n"
+)
+cat(
+  "本次設定分析期間：",
+  format(start_date),
+  "至",
+  format(end_date),
+  "\n"
+)
 
 # 先限制日期，再依業者與市區客運路線白名單篩選。
 period_data <- raw_data[
@@ -262,6 +260,41 @@ next_month_starts <- seq(
 )
 month_info[, 當月日數 := as.integer(diff(next_month_starts))]
 
+# 日期範圍應完整涵蓋113年6月至115年6月，共25個月份。
+if (
+  nrow(month_info) != 25L ||
+    month_info$年月[1] != "2024-06" ||
+    month_info$年月[nrow(month_info)] != "2026-06"
+) {
+  stop("月份設定錯誤：應為2024-06至2026-06，共25個月份。")
+}
+
+analysis_date_range <- analysis_data[, range(搭乘日期)]
+observed_months <- sort(unique(analysis_data$年月))
+missing_months <- setdiff(month_info$年月, observed_months)
+
+cat(
+  "篩選後實際資料日期：",
+  format(analysis_date_range[1]),
+  "至",
+  format(analysis_date_range[2]),
+  "\n"
+)
+cat("圖表月份數：", nrow(month_info), "（應為25）\n")
+
+if (length(missing_months) > 0L) {
+  missing_month_labels <- month_info[
+    年月 %chin% missing_months,
+    表格月份標示
+  ]
+  warning(
+    paste0(
+      "下列月份沒有符合條件的市區客運資料，圖表將以0呈現：",
+      paste(missing_month_labels, collapse = "、")
+    )
+  )
+}
+
 # 釋放不再使用的大型資料，降低記憶體占用。
 rm(raw_data, period_data, operator_data, bus_data)
 invisible(gc())
@@ -269,14 +302,6 @@ invisible(gc())
 # ---------------------------
 # 2. 共用函數
 # ---------------------------
-
-make_ylim <- function(y, top_ratio = 1.10) {
-  y <- y[is.finite(y)]
-  if (length(y) == 0L || max(y) <= 0) {
-    return(c(0, 1))
-  }
-  c(0, max(y) * top_ratio)
-}
 
 # 平均每日使用次數依期末報告採局部範圍，避免從0開始造成折線過度壓縮。
 make_focused_ylim <- function(y, padding_ratio = 0.15) {
@@ -314,29 +339,79 @@ save_png <- function(filename, plot_function) {
   plot_function()
 }
 
-# 畫出期末報告格式：每月保留網格，但橫軸每隔一個月才顯示月份文字。
-draw_grid_and_labels <- function(x_labels, y_ticks, y_digits = NULL) {
+# 畫出期末報告格式：橫軸每隔一個月顯示月份文字，網格依圖別設定。
+draw_grid_and_labels <- function(
+    x_labels,
+    y_ticks,
+    y_digits = NULL,
+    vertical_grid_mode = c("monthly", "major"),
+    grid_lty = "solid",
+    show_zero_y = TRUE,
+    show_axis_lines = TRUE,
+    grid_inset_ratio = 0
+) {
+  vertical_grid_mode <- match.arg(vertical_grid_mode)
   x_at <- seq_along(x_labels)
   x_label_at <- seq(1L, length(x_labels), by = 2L)
   displayed_x_labels <- rep("", length(x_labels))
   displayed_x_labels[x_label_at] <- x_labels[x_label_at]
 
-  abline(
-    v = x_at,
-    h = y_ticks,
+  if (vertical_grid_mode == "monthly") {
+    vertical_grid_at <- x_at
+  } else {
+    x_limits <- par("usr")[1:2]
+    vertical_grid_at <- pretty(x_limits, n = 5L)
+    vertical_grid_at <- vertical_grid_at[
+      vertical_grid_at > x_limits[1] &
+        vertical_grid_at <= x_limits[2]
+    ]
+  }
+
+  displayed_y_ticks <- if (show_zero_y) {
+    y_ticks
+  } else {
+    y_ticks[y_ticks > 0]
+  }
+
+  # 網格只能畫在繪圖區內；右側留白僅供圖例使用。
+  original_xpd <- par("xpd")
+  par(xpd = FALSE)
+
+  plot_region <- par("usr")
+  x_grid_inset <- diff(plot_region[1:2]) * grid_inset_ratio
+  y_grid_inset <- diff(plot_region[3:4]) * grid_inset_ratio
+
+  segments(
+    x0 = vertical_grid_at,
+    y0 = plot_region[3] + y_grid_inset,
+    x1 = vertical_grid_at,
+    y1 = plot_region[4] - y_grid_inset,
     col = "gray88",
-    lty = "solid",
+    lty = grid_lty,
     lwd = 0.8
   )
+
+  segments(
+    x0 = plot_region[1] + x_grid_inset,
+    y0 = displayed_y_ticks,
+    x1 = plot_region[2] - x_grid_inset,
+    y1 = displayed_y_ticks,
+    col = "gray88",
+    lty = grid_lty,
+    lwd = 0.8
+  )
+
+  par(xpd = original_xpd)
 
   axis(
     side = 1,
     at = x_at,
     labels = displayed_x_labels,
     las = 1,
-    tick = TRUE,
+    tick = show_axis_lines,
     lwd = 0.8,
     lwd.ticks = 0.8,
+    col = if (show_axis_lines) "black" else NA,
     col.axis = "black",
     cex.axis = 0.76,
     line = 0
@@ -344,14 +419,14 @@ draw_grid_and_labels <- function(x_labels, y_ticks, y_digits = NULL) {
 
   if (is.null(y_digits)) {
     y_labels <- format(
-      y_ticks,
+      displayed_y_ticks,
       big.mark = ",",
       trim = TRUE,
       scientific = FALSE
     )
   } else {
     y_labels <- format(
-      round(y_ticks, y_digits),
+      round(displayed_y_ticks, y_digits),
       trim = TRUE,
       scientific = FALSE
     )
@@ -359,12 +434,13 @@ draw_grid_and_labels <- function(x_labels, y_ticks, y_digits = NULL) {
 
   axis(
     side = 2,
-    at = y_ticks,
+    at = displayed_y_ticks,
     labels = y_labels,
     las = 1,
-    tick = TRUE,
+    tick = show_axis_lines,
     lwd = 0.8,
     lwd.ticks = 0.8,
+    col = if (show_axis_lines) "black" else NA,
     col.axis = "black",
     cex.axis = 0.90
   )
@@ -756,13 +832,29 @@ save_daily_table_png <- function(daily_table, filename, table_title) {
   )
 }
 
-plot_interval_lines <- function(wide_table, main_title) {
+plot_interval_lines <- function(wide_table, main_title, y_tick_step) {
   y_matrix <- as.matrix(wide_table[, ..ride_labels])
   storage.mode(y_matrix) <- "numeric"
 
   x_at <- seq_len(nrow(wide_table))
-  y_limits <- make_ylim(y_matrix, top_ratio = 1.12)
-  y_ticks <- make_y_ticks(y_limits)
+  y_max <- max(y_matrix, na.rm = TRUE)
+
+  # 依圖別固定縱軸刻度：全體乘客每1,000人、TPASS每50人。
+  y_upper <- ceiling(y_max / y_tick_step) * y_tick_step
+  if (!is.finite(y_upper) || y_upper <= 0) {
+    y_upper <- y_tick_step
+  } else if (y_upper <= y_max) {
+    y_upper <- y_upper + y_tick_step
+  }
+
+  # 依範例保留不對稱的上下空間：
+  # - 最高橫向網格上方再延伸四分之一格，讓直向網格略微凸出；
+  # - 0以下保留0.35格，因此最下面一格會比其餘網格稍高。
+  y_limits <- c(
+    -0.35 * y_tick_step,
+    y_upper + 0.25 * y_tick_step
+  )
+  y_ticks <- seq(0, y_upper, by = y_tick_step)
 
   par(
     family = plot_family,
@@ -775,7 +867,8 @@ plot_interval_lines <- function(wide_table, main_title) {
     x = x_at,
     y = y_matrix[, 1],
     type = "n",
-    xlim = c(1, nrow(wide_table)),
+    # 左右各保留半個月份，使第一個及最後一個資料點不貼住縱軸或邊界。
+    xlim = c(0.5, nrow(wide_table) + 0.5),
     ylim = y_limits,
     xaxs = "i",
     yaxs = "i",
@@ -786,7 +879,11 @@ plot_interval_lines <- function(wide_table, main_title) {
 
   draw_grid_and_labels(
     x_labels = wide_table$月份標示,
-    y_ticks = y_ticks
+    y_ticks = y_ticks,
+    vertical_grid_mode = "monthly",
+    grid_lty = "solid",
+    show_zero_y = FALSE,
+    show_axis_lines = FALSE
   )
 
   for (series_index in seq_along(ride_labels)) {
@@ -805,20 +902,32 @@ plot_interval_lines <- function(wide_table, main_title) {
   mtext(
     main_title,
     side = 3,
-    line = 1.5,
+    # 標題緊接在凸出的直向網格上方。
+    line = 0.4,
     adj = 0,
-    cex = 1.35,
+    cex = 1.50,
     font = 2
   )
   mtext("月份", side = 1, line = 3.0, cex = 1.15)
-  mtext("人數", side = 2, line = 3.3, cex = 1.15)
+  y_axis_label_at <- if (y_tick_step == 1000 && y_upper >= 4000) {
+    3500
+  } else {
+    y_upper / 2
+  }
+  mtext(
+    "人數",
+    side = 2,
+    line = 3.7,
+    at = y_axis_label_at,
+    cex = 1.15
+  )
 
   plot_region <- par("usr")
 
   legend(
-    # 將圖例左緣固定在繪圖區右界之外，完整置於右側留白。
-    x = plot_region[2] + diff(plot_region[1:2]) * 0.04,
-    y = plot_region[4],
+    # 圖例貼近繪圖區右緣，並依範例從頂端下移約一成圖高。
+    x = plot_region[2] + diff(plot_region[1:2]) * 0.005,
+    y = plot_region[4] - diff(plot_region[3:4]) * 0.10,
     legend = ride_labels,
     col = line_colors,
     lty = 1,
@@ -886,7 +995,7 @@ daily_mean_plot <- function() {
     x = x_at,
     y = y,
     type = "n",
-    xlim = c(1, nrow(monthly_daily_mean)),
+    xlim = c(0.5, nrow(monthly_daily_mean) + 0.5),
     ylim = y_limits,
     xaxs = "i",
     yaxs = "i",
@@ -898,7 +1007,13 @@ daily_mean_plot <- function() {
   draw_grid_and_labels(
     x_labels = monthly_daily_mean$月份標示,
     y_ticks = y_ticks,
-    y_digits = 3
+    y_digits = 3,
+    vertical_grid_mode = "major",
+    grid_lty = "dotted",
+    show_zero_y = TRUE,
+    show_axis_lines = TRUE,
+    # 將日均圖網格的四周略微收進，避免視覺上凸出圖框。
+    grid_inset_ratio = 0.008
   )
 
   lines(
@@ -916,17 +1031,21 @@ daily_mean_plot <- function() {
   mtext(
     daily_mean_title,
     side = 3,
-    line = 1.5,
+    # 標題往下靠近繪圖區，與參考圖一致。
+    line = 0.2,
     adj = 0,
-    cex = 1.35,
+    cex = 1.50,
     font = 2
   )
   mtext("月份", side = 1, line = 3.0, cex = 1.15)
-  mtext("日均使用次數", side = 2, line = 3.3, cex = 1.15)
+  mtext("日均使用次數", side = 2, line = 3.7, cex = 1.15)
+
+  plot_region <- par("usr")
 
   legend(
-    "topright",
-    inset = c(-0.15, 0),
+    # 日均圖例依範例貼近右緣，並位於圖框上方區域。
+    x = plot_region[2] + diff(plot_region[1:2]) * 0.005,
+    y = plot_region[4] - diff(plot_region[3:4]) * 0.12,
     legend = "日均使用次數",
     col = line_colors[1],
     lty = 1,
@@ -985,7 +1104,8 @@ save_png(
   paste0(all_interval_plot_title, ".png"),
   function() plot_interval_lines(
     all_interval_count_table,
-    all_interval_plot_title
+    all_interval_plot_title,
+    y_tick_step = 1000
   )
 )
 
@@ -1022,7 +1142,8 @@ save_png(
   paste0(tpass_interval_plot_title, ".png"),
   function() plot_interval_lines(
     tpass_interval_count_table,
-    tpass_interval_plot_title
+    tpass_interval_plot_title,
+    y_tick_step = 50
   )
 )
 
