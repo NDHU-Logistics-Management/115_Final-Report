@@ -14,7 +14,7 @@ csv_path <- file.choose()
 # 輸出資料夾會建立在 CSV 所在的位置。
 output_dir <- file.path(
   dirname(csv_path),
-  "臺東縣市區客運_11306至11506_最終輸出"
+  "臺東縣市區客運_11306至11506_清理後完整輸出"
 )
 
 start_date <- as.IDate("2024-06-01") # 民國113年6月1日
@@ -46,6 +46,16 @@ table_png_width <- 3300
 # TRUE：程式完成後自動開啟輸出資料夾；FALSE：不自動開啟。
 open_output_folder_when_done <- TRUE
 
+# 資料品質處理模式：
+# exclude_flagged_anomalies：主分析只排除CSV明確標記的異常值。
+# strict_validated：僅保留異常旗標為0、檢核錯誤代碼為0、檢核結果為3的紀錄。
+# 預設採前者，避免把僅有站牌／站位檢核問題的搭乘一併刪除。
+quality_filter_mode <- "exclude_flagged_anomalies"
+quality_filter_mode <- match.arg(
+  quality_filter_mode,
+  c("exclude_flagged_anomalies", "strict_validated")
+)
+
 if (!file.exists(csv_path)) {
   stop(paste0("找不到資料檔：", csv_path, "\n請重新選擇正確的CSV檔。"))
 }
@@ -66,12 +76,32 @@ if (.Platform$OS.type == "windows") {
 # 1. 讀取及篩選資料
 # ---------------------------
 
+anomaly_flag_column <- paste0(
+  "是否包含異常值(係指上下站值為-99或上下車時間為",
+  "1970-01-01 00:00:00之情況)"
+)
+validation_error_column <- paste0(
+  "檢核錯誤代碼[-2: 未經二階段檢核; -1: 路線資訊錯誤; ",
+  "0: 驗證通過; 1: 站牌或站位資訊錯誤; ",
+  "2: 業者與路線資訊不匹配; 3: 路線、站牌與業者資訊不匹配]"
+)
+validation_result_column <- paste0(
+  "檢核結果[0: 值域或各式檢核未通過; ",
+  "1: 值域各式檢核通過但包含異常值; ",
+  "2: 代碼或邏輯檢核未通過; ",
+  "3: 值域格式及代碼邏輯皆通過]"
+)
+
 needed_columns <- c(
   "業者編號",
   "卡號",
   "票種類型",
   "票種次類型",
   "搭乘路線代碼",
+  anomaly_flag_column,
+  validation_error_column,
+  validation_result_column,
+  "原始票證筆數",
   "資料代表日期(yyyy-MM-dd)"
 )
 
@@ -103,14 +133,27 @@ raw_data <- fread(
 )
 
 setnames(raw_data, "資料代表日期(yyyy-MM-dd)", "搭乘日期")
+setnames(
+  raw_data,
+  old = c(
+    anomaly_flag_column,
+    validation_error_column,
+    validation_result_column
+  ),
+  new = c("異常值旗標", "檢核錯誤代碼", "檢核結果")
+)
 
-# 去除代碼及卡號前後可能存在的空白，再轉換日期。
+# 去除代碼、卡號及品質欄位前後可能存在的空白，再轉換日期。
 text_columns <- c(
   "業者編號",
   "卡號",
   "票種類型",
   "票種次類型",
-  "搭乘路線代碼"
+  "搭乘路線代碼",
+  "異常值旗標",
+  "檢核錯誤代碼",
+  "檢核結果",
+  "原始票證筆數"
 )
 
 raw_data[, (text_columns) := lapply(.SD, trimws), .SDcols = text_columns]
@@ -187,7 +230,129 @@ if (nrow(bus_data) == 0L) {
   )
 }
 
-# 列出實際納入的路線及筆數，供執行後人工核對。
+# ---------------------------
+# 1-1. 資料品質清理與稽核
+# ---------------------------
+# 先保存已鎖定日期、業者與路線的完整母體，再依品質模式建立分析資料。
+# 原始票證筆數只用於稽核，不作加權；所有指標仍以清理後每列一筆計算。
+scope_data <- copy(bus_data)
+
+scope_data[, 明確異常值 := (
+  !is.na(異常值旗標) & 異常值旗標 == "1"
+)]
+scope_data[, 完整驗證通過 := (
+  !is.na(異常值旗標) & 異常值旗標 == "0" &
+    !is.na(檢核錯誤代碼) & 檢核錯誤代碼 == "0" &
+    !is.na(檢核結果) & 檢核結果 == "3"
+)]
+scope_data[, 清理狀態 := fcase(
+  明確異常值,
+  "明確異常值",
+  完整驗證通過,
+  "完整驗證通過",
+  is.na(異常值旗標) | !異常值旗標 %chin% c("0", "1"),
+  "異常旗標缺漏或非0/1",
+  default = "其他檢核疑慮"
+)]
+scope_data[, 清理年月 := format(搭乘日期, "%Y-%m")]
+
+quality_audit_month <- scope_data[
+  ,
+  .(
+    範圍母體筆數 = .N,
+    明確異常筆數 = sum(明確異常值),
+    排除明確異常後筆數 = sum(異常值旗標 == "0", na.rm = TRUE),
+    完整驗證通過筆數 = sum(完整驗證通過)
+  ),
+  by = 清理年月
+][order(清理年月)]
+
+quality_audit_month[, 明確異常排除比例 :=
+  明確異常筆數 / 範圍母體筆數
+]
+quality_audit_month[, 嚴格驗證排除比例 :=
+  1 - 完整驗證通過筆數 / 範圍母體筆數
+]
+
+quality_audit_reason <- scope_data[
+  ,
+  .(筆數 = .N),
+  by = .(
+    清理年月,
+    搭乘路線代碼,
+    清理狀態,
+    異常值旗標,
+    檢核錯誤代碼,
+    檢核結果
+  )
+][order(清理年月, 搭乘路線代碼, 清理狀態)]
+
+original_count_audit <- scope_data[
+  ,
+  .(筆數 = .N),
+  by = .(清理年月, 原始票證筆數, 清理狀態)
+][order(清理年月, 原始票證筆數, 清理狀態)]
+
+fwrite(
+  quality_audit_month,
+  file.path(output_dir, "資料清理逐月稽核表.csv"),
+  bom = TRUE
+)
+fwrite(
+  quality_audit_reason,
+  file.path(output_dir, "資料清理原因稽核表.csv"),
+  bom = TRUE
+)
+fwrite(
+  original_count_audit,
+  file.path(output_dir, "原始票證筆數稽核表.csv"),
+  bom = TRUE
+)
+
+if (quality_filter_mode == "exclude_flagged_anomalies") {
+  bus_data <- scope_data[
+    !is.na(異常值旗標) & 異常值旗標 == "0"
+  ]
+  selected_filter_label <- "排除CSV明確標記的異常值"
+} else {
+  bus_data <- scope_data[完整驗證通過]
+  selected_filter_label <- "僅保留完整驗證通過紀錄"
+}
+
+cat("\n【資料品質清理】\n")
+cat("清理模式：", selected_filter_label, "\n")
+cat(
+  "鎖定日期、業者及路線後的母體筆數：",
+  format(nrow(scope_data), big.mark = ","),
+  "\n"
+)
+cat(
+  "清理後納入分析筆數：",
+  format(nrow(bus_data), big.mark = ","),
+  "\n"
+)
+cat(
+  "清理排除筆數：",
+  format(nrow(scope_data) - nrow(bus_data), big.mark = ","),
+  "\n"
+)
+cat("原始票證筆數不作加權；清理後每列仍計為一筆使用。\n")
+
+strict_high_impact_months <- quality_audit_month[
+  嚴格驗證排除比例 >= 0.20,
+  清理年月
+]
+if (length(strict_high_impact_months) > 0L) {
+  warning(
+    paste0(
+      "若改採strict_validated，以下月份會排除20%以上資料：",
+      paste(strict_high_impact_months, collapse = "、"),
+      "。請先核對檢核規則是否與其他運具一致。"
+    )
+  )
+}
+
+# 列出清理後實際納入的路線及筆數，供執行後人工核對。
 included_route_summary <- bus_data[
   , .(刷卡筆數 = .N),
   by = 搭乘路線代碼
@@ -296,7 +461,7 @@ if (length(missing_months) > 0L) {
 }
 
 # 釋放不再使用的大型資料，降低記憶體占用。
-rm(raw_data, period_data, operator_data, bus_data)
+rm(raw_data, period_data, operator_data, bus_data, scope_data)
 invisible(gc())
 
 # ---------------------------
@@ -1189,3 +1354,5 @@ if (
 ) {
   shell.exec(normalizePath(output_dir))
 }
+
+
