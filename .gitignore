@@ -1,0 +1,12 @@
+# 審閱用資料夾，不上傳
+review/
+
+# R 相關
+.Rhistory
+
+# Office 暫存檔（開啟 docx/xlsx 時產生的鎖定檔）
+~$*
+
+# 系統檔案
+Thumbs.db
+.DS_Store
