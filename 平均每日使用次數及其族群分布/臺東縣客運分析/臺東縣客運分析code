@@ -10,6 +10,320 @@
 execute_city_bus <- TRUE
 execute_road_bus <- TRUE
 
+# 兩張「平均每日使用次數」折線圖共用花蓮範本格式。
+# 資料與Y軸範圍仍由各自分析結果決定，只統一版面、字級、線條、網格與圖例。
+plot_daily_mean_template <- function(
+    plot_values,
+    x_labels,
+    plot_title,
+    font_family,
+    y_step = NULL,
+    y_extra_steps = 0L
+) {
+  x_positions <- seq_along(plot_values)
+
+  if (length(x_labels) != length(plot_values)) {
+    stop("平均每日使用次數圖的月份標籤數與資料筆數不一致。")
+  }
+  finite_values <- plot_values[is.finite(plot_values)]
+  if (length(finite_values) == 0L) {
+    stop("平均每日使用次數圖沒有可繪製的有效數值。")
+  }
+
+  y_min <- min(finite_values)
+  y_max <- max(finite_values)
+  y_range <- y_max - y_min
+  if (y_range == 0) {
+    y_range <- max(abs(y_max) * 0.10, 0.01)
+  }
+
+  if (is.null(y_step)) {
+    # 花蓮市區客運範本：資料上下各保留10%的範圍。
+    y_limits <- c(
+      y_min - y_range * 0.10,
+      y_max + y_range * 0.10
+    )
+    y_axis_ticks <- NULL
+  } else {
+    if (!is.numeric(y_step) || length(y_step) != 1L || y_step <= 0) {
+      stop("Y軸間距必須是大於0的單一數值。")
+    }
+    if (
+      length(y_extra_steps) != 1L ||
+      is.na(y_extra_steps) ||
+      y_extra_steps < 0 ||
+      y_extra_steps != as.integer(y_extra_steps)
+    ) {
+      stop("Y軸延伸格數必須是大於或等於0的整數。")
+    }
+
+    y_axis_min <- floor(y_min / y_step) * y_step - y_extra_steps * y_step
+    y_axis_max <- ceiling(y_max / y_step) * y_step + y_extra_steps * y_step
+    y_axis_ticks <- seq(y_axis_min, y_axis_max, by = y_step)
+    y_limits <- range(y_axis_ticks)
+  }
+
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par), add = TRUE)
+
+  # 花蓮範本使用15 × 5英吋圖面與下、左、上、右 = 6、8、5、10的邊界。
+  par(
+    family = font_family,
+    mar = c(6, 8, 5, 10)
+  )
+
+  plot(
+    x = x_positions,
+    y = plot_values,
+    type = "o",
+    pch = 16,
+    lwd = 2,
+    col = "black",
+    xaxt = "n",
+    yaxt = "n",
+    bty = "n",
+    xlab = "月份",
+    ylab = "",
+    ylim = y_limits,
+    cex.lab = 1.3,
+    cex.axis = 1.1
+  )
+
+  title(
+    main = plot_title,
+    adj = 0,
+    cex.main = 1.6
+  )
+
+  mtext(
+    "日均使用次數",
+    side = 2,
+    line = 5,
+    cex = 1.3
+  )
+
+  displayed_x_labels <- gsub("/", "", x_labels)
+  x_label_at <- seq(1L, length(x_labels), by = 2L)
+
+  axis(
+    side = 1,
+    at = x_label_at,
+    labels = displayed_x_labels[x_label_at],
+    las = 1,
+    cex.axis = 1
+  )
+  axis(
+    side = 1,
+    at = x_positions,
+    labels = FALSE,
+    tcl = -0.3
+  )
+  if (is.null(y_axis_ticks)) {
+    y_axis_ticks <- axTicks(2)
+  }
+  axis(
+    side = 2,
+    at = y_axis_ticks,
+    # 兩張日均圖的Y軸統一顯示至小數點後兩位。
+    labels = sprintf("%.2f", y_axis_ticks),
+    las = 1,
+    cex.axis = 1.1
+  )
+
+  if (is.null(y_step)) {
+    grid()
+  } else {
+    # 公路客運日均圖使用指定的水平網格；全程維持線性尺度。
+    abline(
+      v = axTicks(1),
+      h = y_axis_ticks,
+      col = "lightgray",
+      lty = "dotted",
+      lwd = par("lwd")
+    )
+  }
+
+  legend(
+    x = length(x_labels) * 1.03,
+    y = max(finite_values),
+    legend = "日均使用次數",
+    col = "black",
+    lwd = 2,
+    pch = 16,
+    bty = "n",
+    xpd = NA
+  )
+}
+
+# 四張搭乘次數區間圖共用花蓮縣格式；Y軸一律維持線性尺度。
+plot_interval_template <- function(
+    y_matrix,
+    x_labels,
+    series_labels,
+    plot_title,
+    font_family,
+    y_step = NULL,
+    lower_half_step = TRUE,
+    right_margin = 10,
+    x_title_line = 3,
+    x_title_cex = 1.1,
+    y_title_line = 4,
+    y_title_cex = 1.1
+) {
+  y_matrix <- as.matrix(y_matrix)
+  storage.mode(y_matrix) <- "numeric"
+
+  if (nrow(y_matrix) != length(x_labels)) {
+    stop("搭乘次數區間圖的月份標籤數與資料列數不一致。")
+  }
+  if (ncol(y_matrix) != length(series_labels)) {
+    stop("搭乘次數區間圖的圖例數與資料欄數不一致。")
+  }
+
+  all_y <- as.numeric(y_matrix)
+  finite_y <- all_y[is.finite(all_y)]
+  if (length(finite_y) == 0L) {
+    stop("搭乘次數區間圖沒有可繪製的有效數值。")
+  }
+
+  y_max <- max(finite_y)
+  if (is.null(y_step)) {
+    y_breaks <- pretty(c(0, y_max), n = 7)
+    y_breaks <- y_breaks[y_breaks >= 0]
+    if (length(y_breaks) < 2L) {
+      y_breaks <- c(0, max(y_max, 100))
+    }
+    y_gap <- y_breaks[2] - y_breaks[1]
+  } else {
+    if (!is.numeric(y_step) || length(y_step) != 1L || y_step <= 0) {
+      stop("搭乘次數區間圖的Y軸間距必須是大於0的單一數值。")
+    }
+    y_upper <- ceiling(y_max / y_step) * y_step
+    if (!is.finite(y_upper) || y_upper <= 0) {
+      y_upper <- y_step
+    }
+    y_breaks <- seq(0, y_upper, by = y_step)
+    y_gap <- y_step
+  }
+
+  y_plot_min <- if (isTRUE(lower_half_step)) {
+    min(y_breaks) - y_gap / 2
+  } else {
+    0
+  }
+  y_plot_max <- max(y_breaks) + y_gap / 2
+  x_at <- seq_len(nrow(y_matrix))
+
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par), add = TRUE)
+
+  par(
+    family = font_family,
+    mar = c(6, 8, 5, right_margin)
+  )
+
+  plot(
+    x = x_at,
+    y = y_matrix[, 1],
+    type = "n",
+    xaxt = "n",
+    yaxt = "n",
+    bty = "n",
+    xlab = "",
+    ylab = "",
+    xlim = c(0.5, nrow(y_matrix) + 0.5),
+    ylim = c(y_plot_min, y_plot_max),
+    xaxs = "i",
+    yaxs = "i"
+  )
+
+  abline(
+    v = x_at,
+    col = "gray85",
+    lty = 1,
+    lwd = 1
+  )
+  abline(
+    h = y_breaks[y_breaks != 0],
+    col = "gray85",
+    lty = 1,
+    lwd = 1
+  )
+
+  series_colors <- c("black", "gray40", "gray70")
+  for (series_index in seq_len(ncol(y_matrix))) {
+    lines(
+      x = x_at,
+      y = y_matrix[, series_index],
+      type = "o",
+      pch = 16,
+      lwd = 2,
+      col = series_colors[series_index]
+    )
+  }
+
+  mtext(
+    plot_title,
+    side = 3,
+    line = 1,
+    at = 0.5,
+    adj = 0,
+    cex = 1.2,
+    font = 2
+  )
+  mtext(
+    "月份",
+    side = 1,
+    line = x_title_line,
+    cex = x_title_cex
+  )
+  mtext(
+    "人數",
+    side = 2,
+    line = y_title_line,
+    cex = y_title_cex
+  )
+
+  x_label_at <- seq(1L, length(x_labels), by = 2L)
+  axis(
+    side = 1,
+    at = x_label_at,
+    labels = gsub("/", "", x_labels[x_label_at]),
+    las = 1,
+    lwd = 0,
+    lwd.ticks = 0,
+    cex.axis = 1
+  )
+
+  displayed_y_breaks <- y_breaks[y_breaks != 0]
+  axis(
+    side = 2,
+    at = displayed_y_breaks,
+    labels = format(
+      displayed_y_breaks,
+      big.mark = ",",
+      scientific = FALSE,
+      trim = TRUE
+    ),
+    las = 1,
+    lwd = 0,
+    lwd.ticks = 0,
+    cex.axis = 1.1
+  )
+
+  legend(
+    x = length(x_labels) * 1.02,
+    y = y_max,
+    title = "搭乘次數",
+    legend = series_labels,
+    col = series_colors,
+    lwd = 2,
+    pch = 16,
+    bty = "n",
+    xpd = NA
+  )
+}
+
 run_city_bus_analysis <- function() {
 # ----------------------------------------------------------------
 # A. 臺東縣市區客運完整程式
@@ -1054,110 +1368,20 @@ plot_interval_lines <- function(wide_table, main_title, y_tick_step) {
   y_matrix <- as.matrix(wide_table[, ..ride_labels])
   storage.mode(y_matrix) <- "numeric"
 
-  x_at <- seq_len(nrow(wide_table))
-  y_max <- max(y_matrix, na.rm = TRUE)
-
-  # 依圖別固定縱軸刻度：全體乘客每1,000人、TPASS每50人。
-  y_upper <- ceiling(y_max / y_tick_step) * y_tick_step
-  if (!is.finite(y_upper) || y_upper <= 0) {
-    y_upper <- y_tick_step
-  } else if (y_upper <= y_max) {
-    y_upper <- y_upper + y_tick_step
-  }
-
-  # 依範例保留不對稱的上下空間：
-  # - 最高橫向網格上方再延伸四分之一格，讓直向網格略微凸出；
-  # - 0以下保留0.35格，因此最下面一格會比其餘網格稍高。
-  y_limits <- c(
-    -0.35 * y_tick_step,
-    y_upper + 0.25 * y_tick_step
-  )
-  y_ticks <- seq(0, y_upper, by = y_tick_step)
-
-  par(
-    family = plot_family,
-    # 右側僅保留圖例所需空間，避免市區客運圖右側留白過多。
-    mar = c(5.0, 5.5, 4.5, 8.5),
-    xpd = NA
-  )
-
-  plot(
-    x = x_at,
-    y = y_matrix[, 1],
-    type = "n",
-    # 左右各保留半個月份，使第一個及最後一個資料點不貼住縱軸或邊界。
-    xlim = c(0.5, nrow(wide_table) + 0.5),
-    ylim = y_limits,
-    xaxs = "i",
-    yaxs = "i",
-    axes = FALSE,
-    ann = FALSE,
-    bty = "n"
-  )
-
-  draw_grid_and_labels(
+  is_tpass_plot <- isTRUE(all.equal(y_tick_step, 50))
+  plot_interval_template(
+    y_matrix = y_matrix,
     x_labels = wide_table$月份標示,
-    y_ticks = y_ticks,
-    vertical_grid_mode = "monthly",
-    grid_lty = "solid",
-    show_zero_y = FALSE,
-    show_axis_lines = FALSE
-  )
-
-  for (series_index in seq_along(ride_labels)) {
-    lines(
-      x = x_at,
-      y = y_matrix[, series_index],
-      type = "o",
-      lty = 1,
-      lwd = 1.8,
-      pch = line_point,
-      cex = 0.82,
-      col = line_colors[series_index]
-    )
-  }
-
-  mtext(
-    main_title,
-    side = 3,
-    # 標題緊接在凸出的直向網格上方。
-    line = 0.4,
-    adj = 0,
-    cex = 1.50,
-    font = 2
-  )
-  mtext("月份", side = 1, line = 3.0, cex = 1.15)
-  y_axis_label_at <- if (y_tick_step == 1000 && y_upper >= 4000) {
-    3500
-  } else {
-    y_upper / 2
-  }
-  mtext(
-    "人數",
-    side = 2,
-    line = 3.7,
-    at = y_axis_label_at,
-    cex = 1.15
-  )
-
-  plot_region <- par("usr")
-
-  legend(
-    # 圖例放在繪圖區右側並緊貼圖框，兼顧完整顯示與減少留白。
-    x = plot_region[2] + diff(plot_region[1:2]) * 0.012,
-    y = plot_region[4] - diff(plot_region[3:4]) * 0.10,
-    legend = ride_labels,
-    col = line_colors,
-    lty = 1,
-    lwd = 1.8,
-    pch = line_point,
-    pt.cex = 0.82,
-    bty = "n",
-    xpd = NA,
-    xjust = 0,
-    yjust = 1,
-    cex = 0.92,
-    title = "搭乘次數"
+    series_labels = ride_labels,
+    plot_title = main_title,
+    font_family = plot_family,
+    y_step = y_tick_step,
+    lower_half_step = TRUE,
+    right_margin = if (is_tpass_plot) 10 else 8,
+    x_title_line = if (is_tpass_plot) 2.8 else 3,
+    x_title_cex = if (is_tpass_plot) 1.3 else 1.1,
+    y_title_line = if (is_tpass_plot) 5 else 4,
+    y_title_cex = if (is_tpass_plot) 1.3 else 1.1
   )
 }
 
@@ -1200,84 +1424,13 @@ monthly_daily_mean[, 日均使用次數 :=
 daily_mean_title <- "113年6月至115年6月臺東縣市區客運平均每日使用次數折線圖"
 
 daily_mean_plot <- function() {
-  x_at <- seq_len(nrow(monthly_daily_mean))
   y <- monthly_daily_mean$日均使用次數
-  y_limits <- make_focused_ylim(y, padding_ratio = 0.15)
-  y_ticks <- make_y_ticks(y_limits)
 
-  par(
-    family = plot_family,
-    # 縮減右側留白，但仍保留完整圖例所需空間。
-    mar = c(5.0, 5.5, 4.5, 8.5),
-    xpd = NA
-  )
-
-  plot(
-    x = x_at,
-    y = y,
-    type = "n",
-    xlim = c(0.5, nrow(monthly_daily_mean) + 0.5),
-    ylim = y_limits,
-    xaxs = "i",
-    yaxs = "i",
-    axes = FALSE,
-    ann = FALSE,
-    bty = "n"
-  )
-
-  draw_grid_and_labels(
+  plot_daily_mean_template(
+    plot_values = y,
     x_labels = monthly_daily_mean$月份標示,
-    y_ticks = y_ticks,
-    y_digits = 3,
-    vertical_grid_mode = "major",
-    grid_lty = "dotted",
-    show_zero_y = TRUE,
-    show_axis_lines = TRUE,
-    # 將日均圖網格的四周略微收進，避免視覺上凸出圖框。
-    grid_inset_ratio = 0.008
-  )
-
-  lines(
-    x = x_at,
-    y = y,
-    type = "o",
-    lty = 1,
-    lwd = 1.8,
-    pch = line_point,
-    cex = 0.82,
-    col = line_colors[1]
-  )
-
-  # 標題從繪圖區左緣開始，與縱向網格起點對齊。
-  mtext(
-    daily_mean_title,
-    side = 3,
-    # 標題往下靠近繪圖區，與參考圖一致。
-    line = 0.2,
-    adj = 0,
-    cex = 1.50,
-    font = 2
-  )
-  mtext("月份", side = 1, line = 3.0, cex = 1.15)
-  mtext("日均使用次數", side = 2, line = 3.7, cex = 1.15)
-
-  plot_region <- par("usr")
-
-  legend(
-    # 日均圖例緊貼繪圖區右側，避免產生過多空白。
-    x = plot_region[2] + diff(plot_region[1:2]) * 0.012,
-    y = plot_region[4] - diff(plot_region[3:4]) * 0.12,
-    legend = "日均使用次數",
-    col = line_colors[1],
-    lty = 1,
-    lwd = 1.8,
-    pch = line_point,
-    pt.cex = 0.82,
-    bty = "n",
-    xpd = NA,
-    xjust = 0,
-    yjust = 1,
-    cex = 0.92
+    plot_title = daily_mean_title,
+    font_family = plot_family
   )
 }
 
@@ -1830,213 +1983,55 @@ report_theme <- function(top_margin = 18, left_margin = 18) {
     )
 }
 
-# 一般乘客與TPASS乘客共用折線圖函數
+# 一般乘客與TPASS乘客共用花蓮縣格式折線圖函數（線性Y軸）
 group_monthly_ridership_lineplot <- function(
     plot_data,
     plot_title,
-    top_margin = 18,
-    left_margin = 18,
-    y_step_override = NULL) {
-  color <- setNames(
-    gray.colors(3, start = 0.10, end = 0.75),
-    interval_levels
-  )
-
-  max_y <- max(plot_data$人數, na.rm = TRUE)
-  if (is.null(y_step_override)) {
-    y_pretty <- pretty(c(0, max_y), n = 10)
-    y_step <- min(diff(y_pretty))
-    y_upper <- min(y_pretty[y_pretty >= max_y])
-  } else {
-    y_step <- y_step_override
-    y_upper <- ceiling(max_y / y_step) * y_step
-  }
-  y_breaks <- seq(y_step, y_upper, by = y_step)
-
-  ggplot(
+    y_step_override = NULL,
+    lower_half_step = TRUE,
+    right_margin = 8) {
+  wide_table <- dcast(
     plot_data,
-    aes(
-      x = 年月,
-      y = 人數,
-      color = 次數區間,
-      group = 次數區間
-    )
-  ) +
-    geom_line(linewidth = 1.0) +
-    geom_point(size = 2.0) +
-    scale_color_manual(values = color, drop = FALSE) +
-    scale_x_discrete(
-      breaks = month_levels,
-      labels = report_month_labels_all,
-      drop = FALSE
-    ) +
-    scale_y_continuous(
-      limits = c(0, y_upper + y_step * 0.35),
-      breaks = y_breaks,
-      labels = scales::comma,
-      expand = expansion(mult = 0)
-    ) +
-    labs(
-      x = "月份",
-      y = "人數",
-      color = "搭乘次數",
-      title = plot_title
-    ) +
-    report_theme(
-      top_margin = top_margin,
-      left_margin = left_margin
-    )
+    年月日期 ~ 次數區間,
+    value.var = "人數",
+    fill = 0
+  )
+  setorder(wide_table, 年月日期)
+
+  for (level_name in interval_levels) {
+    if (!level_name %in% names(wide_table)) {
+      wide_table[, (level_name) := 0L]
+    }
+  }
+
+  y_matrix <- as.matrix(wide_table[, ..interval_levels])
+  plot_interval_template(
+    y_matrix = y_matrix,
+    x_labels = month_levels,
+    series_labels = interval_levels,
+    plot_title = plot_title,
+    font_family = font_family,
+    y_step = y_step_override,
+    lower_half_step = lower_half_step,
+    right_margin = right_margin,
+    x_title_line = 3,
+    x_title_cex = 1.1,
+    y_title_line = 4,
+    y_title_cex = 1.1
+  )
 }
 
 # 平均每日使用次數折線圖函數
 daily_mean_plot <- function(plot_title) {
   plot_values <- daily_mean_data$日平均
-  x_positions <- seq_along(plot_values)
 
-  daily_y_breaks <- pretty(range(plot_values, na.rm = TRUE), n = 7)
-  daily_y_breaks <- daily_y_breaks[
-    daily_y_breaks >= min(plot_values, na.rm = TRUE) -
-      diff(range(plot_values, na.rm = TRUE)) * 0.20 &
-      daily_y_breaks <= max(plot_values, na.rm = TRUE) +
-        diff(range(plot_values, na.rm = TRUE)) * 0.20
-  ]
-  if (length(daily_y_breaks) < 2) {
-    daily_y_breaks <- pretty(range(plot_values, na.rm = TRUE), n = 7)
-  }
-  daily_y_step <- min(diff(sort(unique(daily_y_breaks))))
-
-  daily_y_limits <- c(
-    min(daily_y_breaks) - daily_y_step * 0.5,
-    max(daily_y_breaks) + daily_y_step * 0.35
-  )
-
-  old_par <- par(no.readonly = TRUE)
-  on.exit(par(old_par), add = TRUE)
-  par(
-    family = font_family,
-    mar = c(5, 6, 4, 10),
-    xaxs = "i",
-    yaxs = "i"
-  )
-
-  current_plt <- par("plt")
-  par(plt = current_plt + c(0, 0, -0.027, -0.027))
-
-  plot(
-    x = x_positions,
-    y = plot_values,
-    type = "n",
-    xlab = "",
-    ylab = "日均使用次數",
-    xlim = c(-1.1, 26),
-    ylim = daily_y_limits,
-    xaxt = "n",
-    yaxt = "n",
-    bty = "n",
-    cex.lab = 1.3,
-    cex.axis = 1
-  )
-
-  # 點狀網格；水平網格由Y軸開始
-  vertical_grid_values <- axTicks(1)
-  vertical_grid_values <- vertical_grid_values[
-    abs(vertical_grid_values) > 1e-8
-  ]
-  abline(
-    v = vertical_grid_values,
-    col = "gray88",
-    lty = "dotted",
-    lwd = 1
-  )
-  segments(
-    x0 = 0,
-    y0 = daily_y_breaks,
-    x1 = par("usr")[2],
-    y1 = daily_y_breaks,
-    col = "gray88",
-    lty = "dotted",
-    lwd = 1
-  )
-
-  x_labels <- ifelse(
-    seq_along(month_levels) %% 2 == 1,
-    gsub("/", "", month_levels),
-    ""
-  )
-  axis(
-    side = 1,
-    at = x_positions,
-    labels = x_labels,
-    hadj = 0.45,
-    padj = 0.65,
-    cex.axis = 1,
-    col = "gray45",
-    col.axis = "gray25"
-  )
-  axis(
-    side = 2,
-    at = daily_y_breaks,
-    labels = sprintf("%.2f", daily_y_breaks),
-    las = 1,
-    pos = 0,
-    lwd = 0,
-    lwd.ticks = 1,
-    cex.axis = 1,
-    col = "gray45",
-    col.axis = "gray25"
-  )
-
-  # Y軸與網格起點完全對齊，且上下不突出
-  segments(
-    x0 = 0,
-    y0 = min(daily_y_breaks),
-    x1 = 0,
-    y1 = max(daily_y_breaks),
-    col = "gray45",
-    lwd = 1.5,
-    xpd = FALSE
-  )
-
-  lines(
-    x = x_positions,
-    y = plot_values,
-    type = "o",
-    lwd = 1.5,
-    pch = 16,
-    cex = 0.9,
-    col = gray.colors(2)[1]
-  )
-
-  mtext(
-    text = "月份",
-    side = 1,
-    line = 2.85,
-    at = mean(par("usr")[1:2]) + 1.35,
-    cex = 1.3
-  )
-  mtext(
-    text = plot_title,
-    side = 3,
-    line = 1.50,
-    at = 0,
-    adj = 0,
-    font = 2,
-    cex = 1.55
-  )
-  plot_region <- par("usr")
-  legend(
-    # 使用明確座標將圖例放入右側邊界，避免負 inset 造成文字被裁切。
-    x = plot_region[2] + diff(plot_region[1:2]) * 0.012,
-    y = plot_region[4] - diff(plot_region[3:4]) * 0.10,
-    legend = "日均使用次數",
-    col = gray.colors(2)[1],
-    lwd = 1.5,
-    pch = 16,
-    bty = "n",
-    xpd = NA,
-    xjust = 0,
-    yjust = 1,
-    cex = 1
+  plot_daily_mean_template(
+    plot_values = plot_values,
+    x_labels = month_levels,
+    plot_title = plot_title,
+    font_family = font_family,
+    y_step = 0.02,
+    y_extra_steps = 0L
   )
 }
 
@@ -2357,43 +2352,46 @@ invisible(dev.off())
 # 7-2 一般乘客搭乘次數區間折線圖
 title_road_interval <-
   "113年6月至115年6月臺東縣公路客運乘客各搭乘次數區間月人數變化折線圖"
-road_interval_plot <- group_monthly_ridership_lineplot(
-  plot_data = road_interval_data,
-  plot_title = title_road_interval,
-  top_margin = 40,
-  left_margin = 44
-)
 road_interval_png <- file.path(output_dir, paste0(title_road_interval, ".png"))
-ggsave(
+png(
   filename = road_interval_png,
-  plot = road_interval_plot,
   width = 15,
   height = 5,
   units = "in",
-  dpi = 300,
-  bg = "white"
+  res = 300,
+  bg = "white",
+  family = font_family
 )
+group_monthly_ridership_lineplot(
+  plot_data = road_interval_data,
+  plot_title = title_road_interval,
+  y_step_override = 1000,
+  lower_half_step = FALSE,
+  right_margin = 10
+)
+invisible(dev.off())
 
 # 7-3 TPASS乘客搭乘次數區間折線圖
 title_tpass_interval <-
   "113年6月至115年6月臺東縣公路客運TPASS乘客各搭乘次數區間月人數變化折線圖"
-tpass_interval_plot <- group_monthly_ridership_lineplot(
-  plot_data = tpass_interval_data,
-  plot_title = title_tpass_interval,
-  top_margin = 26,
-  left_margin = 54,
-  y_step_override = 200
-)
 tpass_interval_png <- file.path(output_dir, paste0(title_tpass_interval, ".png"))
-ggsave(
+png(
   filename = tpass_interval_png,
-  plot = tpass_interval_plot,
   width = 15,
   height = 5,
   units = "in",
-  dpi = 300,
-  bg = "white"
+  res = 300,
+  bg = "white",
+  family = font_family
 )
+group_monthly_ridership_lineplot(
+  plot_data = tpass_interval_data,
+  plot_title = title_tpass_interval,
+  y_step_override = NULL,
+  lower_half_step = TRUE,
+  right_margin = 8
+)
+invisible(dev.off())
 
 
 # ----------------------------------------------------------------
