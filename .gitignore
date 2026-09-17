@@ -8,3 +8,6 @@
 # 系統檔案
 Thumbs.db
 .DS_Store
+
+# 由 run-all.R 從 Rmd purl 出來的，可重生
+revise/code/115期末-修訂.R
