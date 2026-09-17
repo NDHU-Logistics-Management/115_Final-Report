@@ -1,0 +1,65 @@
+OK  P1 data_path 與全域設定: 1 處（預期 1）
+OK  P1 library(lubridate): 1 處（預期 1）
+OK  P1 png 檔名（公路 TPASS）: 1 處（預期 1）
+OK  P1 png 檔名（其餘 5 個作圖函數）: 5 處（預期 5）
+OK  P1 xlsx 輸出路徑: 4 處（預期 4）
+OK  P2 TPASS 比例：總搭乘人次／TPASS搭乘人次: 4 處（預期 4）
+OK  P2 里程：搭乘人次／總延人公里: 1 處（預期 1）
+OK  P2 里程檢查表：原始載客人次: 1 處（預期 1）
+OK  P2 里程檢查表：成功配對載客人次: 1 處（預期 1）
+OK  P2 里程配對方法統計：載客人次: 2 處（預期 2）
+OK  P2 平均每日：該月總使用次數: 1 處（預期 1）
+OK  P2 搭乘次數區間：每人每月使用次數: 1 處（預期 1）
+OK  P2 註解：里程 8.: 1 處（預期 1）
+OK  P2 註解：總延人公里: 1 處（預期 1）
+OK  P2 註解：載客人數: 1 處（預期 1）
+OK  P2 註解：該月總使用次數: 1 處（預期 1）
+OK  P2 註解：每位乘客每月: 1 處（預期 1）
+OK  P3 plot_tpass_ratio 簽名（公路、市區兩版）: 2 處（預期 2）
+OK  P3 plot_tpass_ratio 加三角形: 2 處（預期 2）
+OK  P3 plot_monthly_average_mileage 簽名: 1 處（預期 1）
+OK  P3 plot_monthly_average_mileage 加虛線與三角形: 1 處（預期 1）
+OK  P3 plot_avg_daily_use 簽名: 1 處（預期 1）
+OK  P3 plot_avg_daily_use 加三角形: 1 處（預期 1）
+OK  P3 plot_frequency_count 簽名: 1 處（預期 1）
+OK  P3 plot_frequency_count 加三角形: 1 處（預期 1）
+OK  P3 plot_average_transfer 簽名: 1 處（預期 1）
+OK  P3 plot_average_transfer 加三角形: 1 處（預期 1）
+OK  P3 呼叫端 臺東公路客運TPASS比例.png: 1 處（預期 1）
+OK  P3 呼叫端 花蓮市區客運TPASS比例.png: 1 處（預期 1）
+OK  P3 呼叫端 臺東公路客運月平均搭乘里程.png: 1 處（預期 1）
+OK  P3 呼叫端 花蓮市區客運月平均搭乘里程.png: 1 處（預期 1）
+OK  P3 呼叫端 臺東公路客運平均每日使用次數.png: 1 處（預期 1）
+OK  P3 呼叫端 花蓮市區客運平均每日使用次數.png: 1 處（預期 1）
+OK  P3 呼叫端 臺東公路客運乘客各搭乘次數區間月人數變化.png: 1 處（預期 1）
+OK  P3 呼叫端 花蓮市區客運乘客各搭乘次數區間月人數變化.png: 1 處（預期 1）
+OK  P3 呼叫端 臺東公路客運TPASS乘客各搭乘次數區間月人數變化.png: 1 處（預期 1）
+OK  P3 呼叫端 花蓮市區客運TPASS乘客各搭乘次數區間月人數變化.png: 1 處（預期 1）
+OK  P3 呼叫端 臺東地區客運平均轉乘次數折線圖.png: 1 處（預期 1）
+OK  P3 呼叫端 花蓮地區客運平均轉乘次數折線圖.png: 1 處（預期 1）
+OK  P4 plot_avg_daily_use 簽名: 1 處（預期 1）
+OK  P4 plot_avg_daily_use y: 1 處（預期 1）
+OK  P4 plot_avg_daily_use ylab: 1 處（預期 1）
+OK  P4 plot_avg_daily_use 刻度去重: 1 處（預期 1）
+OK  P4 plot_frequency_count 簽名: 1 處（預期 1）
+OK  P4 plot_frequency_count ylab: 1 處（預期 1）
+OK  P4 花蓮市區 每人日平均搭乘次數 計算: 1 處（預期 1）
+OK  P4 圖 3.1.1 呼叫端: 1 處（預期 1）
+OK  P4 圖 3.1.2 呼叫端: 1 處（預期 1）
+OK  P4 圖 3.1.3 呼叫端: 1 處（預期 1）
+OK  P4 分頁 平均每日_花蓮市區 → 單日平均_花蓮市區: 1 處（預期 1）
+OK  P4 分頁 全部乘客_花蓮市區 使用人數→使用人合計日數: 1 處（預期 1）
+OK  P4 分頁 TPASS_花蓮市區 使用人數→使用人合計日數: 1 處（預期 1）
+OK  P5 plot_avg_daily_use 取消數值標籤: 1 處（預期 1）
+OK  P6a plot() 主標題清空（TPASS×2、平均每日、區間、轉乘）: 5 處（預期 5）
+OK  P6a TPASS 兩版加 title(adj = 0): 2 處（預期 2）
+OK  P6a 平均每日加 title(adj = 0): 1 處（預期 1）
+OK  P6a 區間、轉乘加 title(adj = 0): 2 處（預期 2）
+OK  P6b 12 張圖主標題補「折線圖」: 12 處（預期 12）
+OK  P7 里程 4 張圖主標題刪「月」: 4 處（預期 4）
+OK  P8 A7 TPASS 重複列去除: 1 處（預期 1）
+
+殘留 sum(原始票證筆數)：1 處
+  L4919: # sum(原始票證筆數)
+
+已寫回 115期末-修訂.Rmd（5782 行，LF 換行）
