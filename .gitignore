@@ -9,5 +9,5 @@
 Thumbs.db
 .DS_Store
 
-# 由 run-all.R 從 Rmd purl 出來的，可重生
-revise/code/115期末-修訂.R
+# 03_clean_data.R 的資料快取（數百 MB），可重生
+revise/cache/
