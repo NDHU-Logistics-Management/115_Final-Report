@@ -3,13 +3,13 @@ library(tidyr)
 library(data.table)
 
 #--------------公路客運-------------- 
-data0 <- fread("C:/Users/Angela/Documents/運籌期末/公路客運2024_to_202606.txt")
+data0 <- fread("C:/Users/Angela/Desktop/運籌期末/公路客運2024_to_202606.txt")
 data0$搭乘路線名稱 <- trimws(as.character(data0$搭乘路線名稱))
 
 hualien_routes <- c(
   "1121","1122","1125","1128","1129","1130","1132","1133",
   "1135","1136","1137","1139","1140","1141","1142","1143",
-  "1145","8101","8102","8105","8119","8161","8173","8181"
+  "1145","8119","8161","8173","8181"
 ) #花蓮公路客運
 
 taitung_routes <- c(
@@ -41,15 +41,23 @@ hua_tpass <- hualien[
   )
 ]
 
+hua_199 <- hualien[
+  票種次類型 %in% "#HUA-199"
+]
+hua_399 <- hualien[
+  票種次類型 %in% "#HUA-399"
+]
+
+
 #比例計算
 hua_total <- hualien[
   ,
-  .(總搭乘人次 = sum(原始票證筆數)),
+  .(總搭乘人次 = .N),
   by = 月份
 ]
 hua_tpass_total <-  hua_tpass[
   ,
-  .(TPASS搭乘人次 = sum(原始票證筆數)),
+  .(TPASS搭乘人次 = .N),
   by = 月份
 ]
 
@@ -135,7 +143,7 @@ axis(
 
 text(
   x = 1:nrow(hua_total),
-  y = hua_total$TPASS比例 + 1.75,
+  y = hua_total$TPASS比例 + 1.6,
   labels = sprintf("%.1f%%", hua_total$TPASS比例),
   cex = 0.95
 )
@@ -163,12 +171,12 @@ tai_tpass <- taitung[
 
 tai_total <- taitung[
   ,
-  .(總搭乘人次 = sum(原始票證筆數)),
+  .(總搭乘人次 = .N),
   by = 月份
 ]
 tai_tpass_total <-  tai_tpass[
   ,
-  .(TPASS搭乘人次 = sum(原始票證筆數)),
+  .(TPASS搭乘人次 = .N),
   by = 月份
 ]
 tai_total <- merge(
@@ -225,10 +233,29 @@ abline(
 lines(
   x = 1:nrow(tai_total),
   y = tai_total$TPASS比例,
-  type = "o",
-  pch = 16,
+  type = "l",
   lwd = 1.5,
+  col = "grey30"
+)
+#114/11
+special_idx <- which(tai_total$月份 == "114/11")
+# 其他月份
+normal_idx <- setdiff(1:nrow(tai_total), special_idx)
+
+points(
+  x = normal_idx,
+  y = tai_total$TPASS比例[normal_idx],
+  pch = 16,
   cex = 1.0,
+  col = "grey30"
+)
+
+points(
+  x = special_idx,
+  y = tai_total$TPASS比例[special_idx],
+  pch = 2,
+  cex = 1.3,
+  lwd = 1.5,
   col = "grey30"
 )
 
