@@ -4,10 +4,10 @@ library(lubridate)
 library(openxlsx)
 
 data1 <- fread(
-  "C:/Users/Angela/Documents/運籌期末/公路客運2024_to_202606.txt"
+  "C:/Users/Angela/Desktop/運籌期末/公路客運2024_to_202606.txt"
 )
 data2 <- fread(
-  "C:/Users/Angela/Documents/運籌期末/花蓮縣公車.txt"
+  "C:/Users/Angela/Desktop/運籌期末/花蓮縣公車.txt"
 )
 
 data1$搭乘路線名稱 <- trimws(as.character(data1$搭乘路線名稱))
@@ -154,7 +154,7 @@ transfer_check <- transfer_trip %>%
 
 write.xlsx(
   transfer_check,
-  "C:/Users/Angela/Documents/運籌期末/花蓮縣轉乘人次詳細統計表.xlsx",
+  "C:/Users/Angela/Desktop/運籌期末/花蓮縣轉乘人次詳細統計表.xlsx",
   overwrite = TRUE
 )
 
@@ -165,45 +165,35 @@ monthly_transfer <- transfer_trip %>%
   
   summarise(
     # 全部
-    總搭乘人次 = sum(
-      原始票證筆數,
-      na.rm = TRUE
-    ),
+    總搭乘人次 = n(),
     
-    總轉乘次數 = sum(
-      原始票證筆數[是否轉乘 == 1],
+    總轉乘次數 = sum(是否轉乘 == 1,
       na.rm = TRUE
     ),
     
     # TPASS
     TPASS搭乘人次 = sum(
-      原始票證筆數[
-        票種分類 == "TPASS"
-      ],
+        票種分類 == "TPASS",
       na.rm = TRUE
     ),
     
     TPASS轉乘次數 = sum(
-      原始票證筆數[
-        是否轉乘 == 1 &
-          票種分類 == "TPASS"
-      ],
+      是否轉乘 == 1 &
+        票種分類 == "TPASS",
       na.rm = TRUE
     ),
     
     # 其他票種
     其他票種搭乘人次 = sum(
-      原始票證筆數[
-        票種分類 == "其他票種"
-      ],
+         票種分類 == "其他票種"
+      ,
       na.rm = TRUE
     ),
     
     其他票種轉乘次數 = sum(
-      原始票證筆數[
         是否轉乘 == 1 &
           票種分類 == "其他票種"
-      ],
+      ,
       na.rm = TRUE
     ),
     
@@ -231,7 +221,7 @@ monthly_transfer <- transfer_trip %>%
 
 write.xlsx(
   monthly_transfer,
-  "C:/Users/Angela/Documents/運籌期末/花蓮縣月平均轉乘次數.xlsx",
+  "C:/Users/Angela/Desktop/運籌期末/花蓮縣月平均轉乘次數.xlsx",
   overwrite = TRUE
 )
 
