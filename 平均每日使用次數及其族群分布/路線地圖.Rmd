@@ -1,0 +1,433 @@
+```yaml
+---
+title: "花蓮臺東 1140、1145 客運路線圖"
+output: html_document
+---
+```
+
+```{r setup, message=FALSE, warning=FALSE}
+# ============================================================
+# 0. 套件
+# ============================================================
+packages <- c("sf", "ggplot2", "dplyr", "ggrepel")
+
+new_packages <- packages[
+  !packages %in% installed.packages()[, "Package"]
+]
+
+if (length(new_packages) > 0) {
+  install.packages(new_packages)
+}
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(ggrepel)
+
+# ============================================================
+# 1. 路徑設定
+# ============================================================
+
+shp_dir <- "C:/Users/AVITA/Downloads/TOWN_MOI"
+
+output_file <- file.path(
+  "C:/Users/AVITA/Downloads",
+  "1140_1145_花蓮臺東全站點路線圖.png"
+)
+
+if (!dir.exists(shp_dir)) {
+  stop("找不到鄉鎮市區界線資料夾：", shp_dir)
+}
+
+# ============================================================
+# 2. 讀取鄉鎮市區界線
+#    自動尋找含縣市名稱及鄉鎮市區名稱欄位的 shp
+# ============================================================
+
+shp_files <- list.files(
+  shp_dir,
+  pattern = "\\.shp$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+if (length(shp_files) == 0) {
+  stop("資料夾內找不到 .shp 檔案。")
+}
+
+town_sf <- NULL
+
+for (f in shp_files) {
+  tmp <- tryCatch(
+    st_read(f, quiet = TRUE),
+    error = function(e) NULL
+  )
+
+  if (is.null(tmp)) next
+
+  nm <- names(tmp)
+
+  county_candidates <- c(
+    "COUNTYNAME", "COUNTY_NAM", "COUNTY",
+    "縣市名稱", "縣市"
+  )
+
+  town_candidates <- c(
+    "TOWNNAME", "TOWN_NAM", "TOWN",
+    "鄉鎮市區名稱", "鄉鎮市區"
+  )
+
+  county_col <- county_candidates[
+    county_candidates %in% nm
+  ][1]
+
+  town_col <- town_candidates[
+    town_candidates %in% nm
+  ][1]
+
+  if (
+    !is.na(county_col) &&
+    !is.na(town_col)
+  ) {
+    town_sf <- tmp
+    break
+  }
+}
+
+if (is.null(town_sf)) {
+  stop(
+    "找不到同時包含縣市及鄉鎮市區欄位的 shp。",
+    "請確認資料夾內的欄位名稱。"
+  )
+}
+
+# 統一轉為經緯度座標
+town_sf <- st_transform(town_sf, 4326)
+
+# 只保留花蓮縣、臺東縣
+east_towns <- town_sf %>%
+  filter(
+    .data[[county_col]] %in%
+      c("花蓮縣", "臺東縣", "台東縣")
+  )
+
+if (nrow(east_towns) == 0) {
+  stop("沒有找到花蓮縣、臺東縣的鄉鎮市區資料。")
+}
+
+# ============================================================
+# 3. 1145 完整站序
+# ============================================================
+
+stations_1145 <- strsplit(
+  paste0(
+    "花蓮轉運站|帝君廟|市民廣場|明禮國小|中華路|",
+    "花蓮文創園區(中正)|中福站|中正國小|仁里橋|吉安分局|",
+    "南埔加油站|海岸東海十五街口|海岸南海一街口|",
+    "海岸南海二街口|海岸南海四街口|海岸南海八街口|",
+    "海岸南海十一街口|中華紙漿廠(海岸路)|花蓮大橋|",
+    "七七高地|嶺頂|大坑|海洋公園|北福德|南福德|和南寺|",
+    "鹽寮|海巡防|橄樹腳教會|橄樹腳|12號橋|水璉分隊|",
+    "水璉一街|水璉|南坑|牛山|蜈蚣坑|蕃薯寮休息區|芭崎|",
+    "牛寮坑|砂脈橋|磯崎|磯崎道班房|磯崎海水浴場|",
+    "大石鼻山步道|葛瑪蘭民宿|高山|親不知子海上古道|",
+    "小湖|新社梯田|新社|新社國小|百齡|新莊|北東興|",
+    "南東興|奇卡旦|永豐橋|富光|深橋|恩主公廟|小港|",
+    "豐濱監工站|豐濱|北立德|立德|大灣|石門休憩區|",
+    "石門|石梯灣|石梯漁港|石梯坪遊憩區|北石梯坪|",
+    "南石梯坪|月洞|港口|獅子山|大港口|長虹橋|",
+    "奚卜蘭遊客中心|靜浦國小|靜埔B|靜浦教會|靜浦|",
+    "北回歸線|三富橋|千禧山莊|大峯村|北樟原|南樟原|",
+    "樟原|八仙洞|大俱來|三間屋|三間|北真柄|真柄|",
+    "城子埔|長光|長濱|長濱分駐所|長濱鄉衛生所|",
+    "長濱鄉公所|田組|永福|南永福|竹湖國小|竹湖|南竹湖|",
+    "城山|北八桑安|八桑安|寧埔社區|北烏石鼻|膽墁|",
+    "界橋|宜灣|重安|石雨傘|玉水橋|小港|北美山|美山|",
+    "白守蓮|三仙台遊憩區|成功"
+  ),
+  "\\|"
+)[[1]]
+
+# ============================================================
+# 4. 1140 完整站序
+# ============================================================
+
+stations_1140 <- strsplit(
+  paste0(
+    "花蓮轉運站|帝君廟|市民廣場|明禮國小|中華路|",
+    "花蓮文創園區(中正)|中福站|中正國小|仁里橋|吉安分局|",
+    "南埔加油站|海岸東海十五街口|海岸南海一街口|",
+    "海岸南海二街口|海岸南海四街口|海岸南海八街口|",
+    "海岸南海十一街口|中華紙漿廠(海岸路)|花蓮大橋|",
+    "七七高地|嶺頂|大坑|海洋公園|北福德|南福德|和南寺|",
+    "鹽寮|海巡防|橄樹腳教會|橄樹腳|12號橋|水璉分隊|",
+    "水璉一街|水璉|牛山|蜈蚣坑|蕃薯寮坑|蕃薯寮休息區|",
+    "芭崎|牛寮坑|砂脈橋|磯崎|磯崎道班房|磯崎海水浴場|",
+    "大石鼻山步道|葛瑪蘭民宿|高山|親不知子海上古道|",
+    "小湖|新社梯田|新社|新社國小|新莊|北東興|南東興|",
+    "永豐橋|富光|深橋|恩主公廟|小港|豐濱監工站|",
+    "豐濱鄉公所|豐濱加油站|豐濱|北立德|立德|",
+    "石門休憩區|石門|石梯灣|石梯橋休息區|石梯漁港|",
+    "石梯坪遊憩區|北石梯坪|南石梯坪|月洞|港口|獅子山|",
+    "大港口|長虹橋|奚卜蘭遊客中心|靜浦國小|靜浦教會|靜浦"
+  ),
+  "\\|"
+)[[1]]
+
+# ============================================================
+# 5. 設定沿海控制點（示意座標，非實際 GPS）
+# ============================================================
+
+anchors <- data.frame(
+  station = c(
+    "花蓮轉運站", "花蓮大橋", "海洋公園",
+    "水璉", "牛山", "蕃薯寮休息區",
+    "磯崎", "新社", "豐濱",
+    "石梯漁港", "大港口", "靜浦教會",
+    "北回歸線", "樟原", "長濱",
+    "竹湖", "宜灣", "石雨傘",
+    "三仙台遊憩區", "成功"
+  ),
+  lon = c(
+    121.606, 121.590, 121.603,
+    121.575, 121.570, 121.558,
+    121.553, 121.535, 121.491,
+    121.505, 121.493, 121.493,
+    121.455, 121.430, 121.450,
+    121.420, 121.390, 121.370,
+    121.385, 121.378
+  ),
+  lat = c(
+    23.991, 23.936, 23.871,
+    23.779, 23.755, 23.700,
+    23.677, 23.586, 23.447,
+    23.296, 23.202, 23.125,
+    23.250, 23.300, 23.320,
+    23.245, 23.180, 23.120,
+    23.095, 23.100
+  )
+)
+
+# ============================================================
+# 6. 建立兩條路線
+# ============================================================
+
+make_route <- function(stations, anchors, route_name) {
+
+  anchor_index <- match(anchors$station, stations)
+  valid <- !is.na(anchor_index)
+
+  anchor_index <- anchor_index[valid]
+  anchor_data <- anchors[valid, ]
+
+  ord <- order(anchor_index)
+  anchor_index <- anchor_index[ord]
+  anchor_data <- anchor_data[ord, ]
+
+  keep <- !duplicated(anchor_index)
+  anchor_index <- anchor_index[keep]
+  anchor_data <- anchor_data[keep, ]
+
+  idx <- seq_along(stations)
+
+  data.frame(
+    route = route_name,
+    stop_order = idx,
+    station = stations,
+    lon = approx(
+      anchor_index, anchor_data$lon,
+      xout = idx, rule = 2
+    )$y,
+    lat = approx(
+      anchor_index, anchor_data$lat,
+      xout = idx, rule = 2
+    )$y
+  )
+}
+
+route1145 <- make_route(
+  stations_1145, anchors, "1145"
+)
+
+route1140 <- make_route(
+  stations_1140,
+  anchors[anchors$station %in% stations_1140, ],
+  "1140"
+)
+
+# ============================================================
+# 7. 只保留重點站名，不畫全部站點
+# ============================================================
+
+important_stations <- c(
+  "花蓮轉運站",
+  "水璉",
+  "牛山",
+  "蕃薯寮休息區",
+  "新社國小",
+  "永豐橋",
+  "豐濱",
+  "石門休憩區",
+  "石梯漁港",
+  "靜浦教會",
+  "田組",
+  "成功"
+)
+
+label_points <- bind_rows(
+  route1145,
+  route1140
+) %>%
+  filter(station %in% important_stations) %>%
+  mutate(priority = ifelse(route == "1145", 1, 2)) %>%
+  arrange(priority, stop_order) %>%
+  distinct(station, .keep_all = TRUE)
+
+# ============================================================
+# 8. 鄉鎮市區名稱位置
+# ============================================================
+
+town_label_sf <- east_towns %>%
+  st_make_valid() %>%
+  st_point_on_surface()
+
+town_coords <- st_coordinates(town_label_sf)
+
+town_labels <- town_label_sf %>%
+  st_drop_geometry() %>%
+  mutate(
+    lon = town_coords[, 1],
+    lat = town_coords[, 2],
+    town_label = .data[[town_col]]
+  )
+
+# ============================================================
+# 9. 繪圖：只畫線及重點站名
+# ============================================================
+
+p <- ggplot() +
+
+  geom_sf(
+    data = east_towns,
+    fill = "gray98",
+    color = "gray65",
+    linewidth = 0.35
+  ) +
+
+  geom_text(
+    data = town_labels,
+    aes(lon, lat, label = town_label),
+    size = 2.7,
+    color = "gray50",
+    check_overlap = TRUE
+  ) +
+
+  # 1140 紅色實線
+  geom_path(
+    data = route1140,
+    aes(lon, lat, color = "1140"),
+    linewidth = 1.1,
+    linetype = "solid",
+    lineend = "round"
+  ) +
+
+  # 1145 藍色虛線
+  geom_path(
+    data = route1145,
+    aes(lon, lat, color = "1145"),
+    linewidth = 1.1,
+    linetype = "dashed",
+    lineend = "round"
+  ) +
+
+  # 只標重點站名，不畫站點圓點
+  geom_text_repel(
+    data = label_points,
+    aes(lon, lat, label = station),
+    size = 3.3,
+    color = "black",
+    box.padding = 0.4,
+    point.padding = 0.15,
+    min.segment.length = 0,
+    segment.color = "gray45",
+    max.overlaps = Inf,
+    seed = 123
+  ) +
+
+  scale_color_manual(
+    name = "客運路線",
+    values = c(
+      "1140" = "red3",
+      "1145" = "blue3"
+    ),
+    labels = c(
+      "1140" = "1140（紅色實線）",
+      "1145" = "1145（藍色虛線）"
+    )
+  ) +
+
+  labs(
+    title = "花蓮、臺東 1140 與 1145 客運路線圖",
+    subtitle = "沿海示意路線；僅標示重點站點",
+    x = "經度",
+    y = "緯度",
+    caption = "站點及路線位置為示意估算，非實際 GPS 軌跡"
+  ) +
+
+  coord_sf(
+    crs = st_crs(4326),
+    xlim = c(121.25, 121.75),
+    ylim = c(23.00, 24.10),
+    expand = FALSE
+  ) +
+
+  theme_minimal(base_size = 12) +
+
+  theme(
+    plot.title = element_text(
+      face = "bold", size = 16, hjust = 0.5
+    ),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    panel.grid.major = element_line(
+      color = "gray90", linewidth = 0.25
+    )
+  )
+
+print(p)
+
+# ============================================================
+# 10. 匯出圖片
+# ============================================================
+
+ggsave(
+  filename = output_file,
+  plot = p,
+  width = 12,
+  height = 10,
+  dpi = 300,
+  bg = "white"
+)
+
+cat("圖片已輸出至：", output_file, "\n")
+
+# ============================================================
+# 11. 匯出圖片
+# ============================================================
+
+ggsave(
+  filename = output_file,
+  plot = p,
+  width = 12,
+  height = 10,
+  dpi = 300,
+  bg = "white"
+)
+
+cat(
+  "\n圖片已輸出至：\n",
+  output_file,
+  "\n"
+)
+```
