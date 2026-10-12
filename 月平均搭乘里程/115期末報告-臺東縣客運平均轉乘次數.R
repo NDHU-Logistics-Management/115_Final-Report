@@ -282,6 +282,17 @@ bus_average_transfer_plot <- function(df, title_main, filename, flag_months = NU
   lines(x = 1:nrow(df), y = df$其他票種平均轉乘次數,
         type = "o", lwd = 2, pch = pch_list, cex = 1.5, col = color[3])
   
+  # ← 在這裡加上，把三條線的三角形都重畫成黑色
+  if (!is.null(flag_months)) {
+    flag_idx <- which(df$年月 %in% flag_months)
+    points(flag_idx, df$平均轉乘次數[flag_idx],
+           pch = 2, cex = 1.5, col = "black", lwd = 2)
+    points(flag_idx, df$TPASS平均轉乘次數[flag_idx],
+           pch = 2, cex = 1.5, col = "black", lwd = 2)
+    points(flag_idx, df$其他票種平均轉乘次數[flag_idx],
+           pch = 2, cex = 1.5, col = "black", lwd = 2)
+  }
+  
   title(main = title_main, cex.main = 2, adj = 0)
   
   axis(side = 1,at = seq(1, nrow(df), by = 2),
